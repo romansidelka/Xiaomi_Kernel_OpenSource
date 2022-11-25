@@ -14,6 +14,9 @@
 
 #define KMSG_COMPONENT "ExtM"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+#define ANON_WRITEBACK_ENABLE 1
+#endif
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -33,6 +36,7 @@
 #include <linux/debugfs.h>
 #include <linux/cpuhotplug.h>
 #include <linux/part_stat.h>
+#include <linux/memcontrol.h>
 #include <linux/sched.h>
 #include <linux/sched/signal.h>
 #include <linux/vmstat.h>
@@ -343,6 +347,9 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 		zram_slot_lock(zram, index);
 		if (zram_get_obj_size(zram, index) &&
 				zram_test_flag(zram, index, ZRAM_COMPRESS_LOW) &&
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+				zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE) &&
+#endif
 				!zram_test_flag(zram, index, ZRAM_UNDER_WB) &&
 				!zram_test_flag(zram, index, ZRAM_WB)) {
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
@@ -902,6 +909,10 @@ static ssize_t writeback_store(struct device *dev,
 		if (mode & HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
 			goto next;
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+		if (!zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE))
+			goto next;
+#endif
 		/*
 		 * Clearing ZRAM_UNDER_WB is duty of caller.
 		 * IOW, zram_free_page never clear it.
@@ -1801,6 +1812,12 @@ static void zram_free_page(struct zram *zram, size_t index)
 		atomic64_dec(&zram->stats.huge_pages);
 	}
 
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	if (zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE)) {
+		zram_clear_flag(zram, index, ZRAM_WRITEBACK_ENABLE);
+	}
+#endif
+
 	if (zram_test_flag(zram, index, ZRAM_WB)) {
 		zram_clear_flag(zram, index, ZRAM_WB);
 		free_block_bdev(zram, zram_get_element(zram, index));
@@ -1945,6 +1962,10 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	struct page *page = bvec->bv_page;
 	unsigned long element = 0;
 	enum zram_pageflags flags = 0;
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	struct mem_cgroup *memcg = page_memcg(page);
+	unsigned long android_oem_data1;
+#endif
 
 	mem = kmap_atomic(page);
 	if (page_same_filled(mem, &element)) {
@@ -2059,6 +2080,16 @@ out:
 			atomic64_inc(&zram->stats.lowratio_pages);
 		}
 	}
+
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	if (memcg != NULL) {
+		android_oem_data1 = READ_ONCE(memcg->android_oem_data1);
+		if (android_oem_data1 == ANON_WRITEBACK_ENABLE) {
+			zram_set_flag(zram, index, ZRAM_WRITEBACK_ENABLE);
+		}
+	}
+#endif
+
 	zram_slot_unlock(zram, index);
 
 	/* Update stats */

@@ -50,6 +50,9 @@ enum zram_pageflags {
 	ZRAM_HUGE,	/* Incompressible page */
 	ZRAM_COMPRESS_LOW, /*lower than aim compaction ratio */
 	ZRAM_IDLE,	/* not accessed page since last idle marking */
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	ZRAM_WRITEBACK_ENABLE, /* the MemoryFreeze cgroup page can wrieback */
+#endif
 
 	__NR_ZRAM_PAGEFLAGS,
 };
