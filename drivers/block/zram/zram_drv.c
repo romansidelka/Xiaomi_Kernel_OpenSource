@@ -2735,6 +2735,36 @@ static void destroy_devices(void)
 	cpuhp_remove_multi_state(CPUHP_ZCOMP_PREPARE);
 }
 
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+static u64 mem_cgroup_anno_writeback_enable_read(struct cgroup_subsys_state *css,
+				      struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg->android_oem_data1;
+}
+
+static int mem_cgroup_anno_writeback_enable_write(struct cgroup_subsys_state *css,
+				       struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	if (css->parent)
+		memcg->android_oem_data1 = !!val;
+
+	return 0;
+}
+
+static struct cftype memsw_files[] = {
+	{
+		.name = "anno_writeback_enable",
+		.read_u64 = mem_cgroup_anno_writeback_enable_read,
+		.write_u64 = mem_cgroup_anno_writeback_enable_write,
+	},
+	{ },	/* terminate */
+};
+#endif
+
 static int __init zram_init(void)
 {
 	int ret;
@@ -2772,6 +2802,10 @@ static int __init zram_init(void)
 			goto out_error;
 		num_devices--;
 	}
+
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	WARN_ON(cgroup_add_legacy_cftypes(&memory_cgrp_subsys, memsw_files));
+#endif
 
 	return 0;
 
