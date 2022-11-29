@@ -337,7 +337,7 @@ static ssize_t mem_used_max_store(struct device *dev,
  */
 static void mark_idle(struct zram *zram, ktime_t cutoff)
 {
-	int is_idle = 1, mark_nr = 0;
+	int mark_nr = 0;
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	int index;
 
@@ -831,6 +831,80 @@ err:
 	return ret;
 }
 
+static int wait_for_writeback_batch(struct zram *zram, int start_blkidx, int nr_write,
+					struct writeback_batch_pages *batch_pages)
+{
+	struct bio bio;
+	struct bio_vec bio_vecs[MAX_WRITEBACK_SIZE];
+	int i, err, index;
+	int wb_pages_nr = 0;
+
+	bio_init(&bio, zram->bdev, bio_vecs, nr_write,
+			 REQ_OP_WRITE | REQ_SYNC);
+	bio.bi_iter.bi_sector = start_blkidx * (PAGE_SIZE >> 9);
+	bio.bi_opf = REQ_OP_WRITE | REQ_SYNC;
+
+	for (i = 0; i < nr_write; i++)
+		bio_add_page(&bio, batch_pages[i].page, PAGE_SIZE, 0);
+
+	err = submit_bio_wait(&bio);
+	if (err) {
+		for (i = 0; i < nr_write; i++) {
+			index = batch_pages[i].index;
+			zram_slot_lock(zram, index);
+			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+			zram_clear_flag(zram, index, ZRAM_IDLE);
+			zram_clear_idle_count(zram, index);
+			zram_slot_unlock(zram, index);
+			free_block_bdev(zram, start_blkidx + i);
+		}
+		/*
+		* Return last IO error unless every IO were
+		* not suceeded.
+		*/
+		return 0;
+	}
+
+	for (i = 0; i < nr_write; i++) {
+		index = batch_pages[i].index;
+		atomic64_inc(&zram->stats.bd_writes);
+		/*
+		 * We released zram_slot_lock so need to check if the slot was
+		 * changed. If there is freeing for the slot, we can catch it
+		 * easily by zram_allocated.
+		 * A subtle case is the slot is freed/reallocated/marked as
+		 * ZRAM_IDLE again. To close the race, idle_store doesn't
+		 * mark ZRAM_IDLE once it found the slot was ZRAM_UNDER_WB.
+		 * Thus, we could close the race by checking ZRAM_IDLE bit.
+		 */
+		zram_slot_lock(zram, index);
+		if (!zram_allocated(zram, index) ||
+			  !zram_test_flag(zram, index, ZRAM_IDLE)) {
+			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+			zram_clear_flag(zram, index, ZRAM_IDLE);
+			zram_clear_idle_count(zram, index);
+			zram_slot_unlock(zram, index);
+			free_block_bdev(zram, start_blkidx + i);
+			continue;
+		}
+
+		zram_free_page(zram, index);
+		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
+		zram_set_flag(zram, index, ZRAM_WB);
+		zram_set_element(zram, index, start_blkidx + i);
+		wb_pages_nr++;
+		// blk_idx = 0;
+		atomic64_inc(&zram->stats.pages_stored);
+		spin_lock(&zram->wb_limit_lock);
+		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
+			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
+		spin_unlock(&zram->wb_limit_lock);
+		zram_slot_unlock(zram, index);
+	}
+
+	return wb_pages_nr;
+}
+
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
@@ -838,12 +912,11 @@ static ssize_t writeback_store(struct device *dev,
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	unsigned long index = 0, wb_max = ULONG_MAX;
 	unsigned int wb_idle_min = ZRAM_WB_IDLE_DEFAULT;
-	struct bio bio;
-	struct bio_vec bio_vec;
-	struct page *page;
+	struct writeback_batch_pages batch_pages[MAX_WRITEBACK_SIZE];
+	int nr_write = 0, flush_count = 0;
 	ssize_t ret = len;
-	int mode, err;
-	unsigned long blk_idx = 0, wb_pages_nr = 0;
+	int mode;
+	unsigned long blk_idx = 0, start_blkidx = 0, wb_pages_nr = 0;
 
 	if (writeback_parse_input(buf, &wb_max, &wb_idle_min))
 		mode = IDLE_WRITEBACK;
@@ -876,8 +949,7 @@ static ssize_t writeback_store(struct device *dev,
 		goto release_init_lock;
 	}
 
-	page = alloc_page(GFP_KERNEL);
-	if (!page) {
+	if (!zram->writeback_pages) {
 		ret = -ENOMEM;
 		goto release_init_lock;
 	}
@@ -885,10 +957,7 @@ static ssize_t writeback_store(struct device *dev,
 	for (; nr_pages != 0; index++, nr_pages--) {
 		struct bio_vec bvec;
 
-			if (wb_pages_nr >= wb_max)
-					break;
-
-						/*
+		/*
 		 * If the writeback thread is running and we receive the
 		 * SCREEN_ON event, we will send SIGUSR1 singnal to teriminate
 		 * the writeback thread. So if there is a SIGUSR1 signal in
@@ -901,10 +970,6 @@ static ssize_t writeback_store(struct device *dev,
 			ret = -EINTR;
 			break;
 		}
-
-		bvec.bv_page = page;
-		bvec.bv_len = PAGE_SIZE;
-		bvec.bv_offset = 0;
 
 		spin_lock(&zram->wb_limit_lock);
 		if (zram->wb_limit_enable && !zram->bd_wb_limit) {
@@ -920,7 +985,25 @@ static ssize_t writeback_store(struct device *dev,
 				ret = -ENOSPC;
 				break;
 			}
+			if (nr_write == 0)
+				start_blkidx = blk_idx;
 		}
+
+		if (nr_write >= MAX_WRITEBACK_SIZE ||
+				(start_blkidx + nr_write != blk_idx)) {
+			wb_pages_nr += wait_for_writeback_batch(zram, start_blkidx,
+								nr_write, batch_pages);
+			start_blkidx = blk_idx;
+			nr_write = 0;
+			flush_count++;
+		}
+
+		if (wb_pages_nr >= wb_max)
+			break;
+
+		bvec.bv_page = zram->writeback_pages + nr_write;
+		bvec.bv_len = PAGE_SIZE;
+		bvec.bv_offset = 0;
 
 		zram_slot_lock(zram, index);
 		if (!zram_allocated(zram, index))
@@ -960,72 +1043,26 @@ static ssize_t writeback_store(struct device *dev,
 			continue;
 		}
 
-		bio_init(&bio, zram->bdev, &bio_vec, 1,
-			 REQ_OP_WRITE | REQ_SYNC);
-		bio.bi_iter.bi_sector = blk_idx * (PAGE_SIZE >> 9);
-
-		bio_add_page(&bio, bvec.bv_page, bvec.bv_len,
-				bvec.bv_offset);
-		/*
-		 * XXX: A single page IO would be inefficient for write
-		 * but it would be not bad as starter.
-		 */
-		err = submit_bio_wait(&bio);
-		if (err) {
-			zram_slot_lock(zram, index);
-			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_clear_idle_count(zram, index);
-			zram_slot_unlock(zram, index);
-			/*
-			 * Return last IO error unless every IO were
-			 * not suceeded.
-			 */
-			ret = err;
-			continue;
-		}
-
-		atomic64_inc(&zram->stats.bd_writes);
-		/*
-		 * We released zram_slot_lock so need to check if the slot was
-		 * changed. If there is freeing for the slot, we can catch it
-		 * easily by zram_allocated.
-		 * A subtle case is the slot is freed/reallocated/marked as
-		 * ZRAM_IDLE again. To close the race, idle_store doesn't
-		 * mark ZRAM_IDLE once it found the slot was ZRAM_UNDER_WB.
-		 * Thus, we could close the race by checking ZRAM_IDLE bit.
-		 */
-		zram_slot_lock(zram, index);
-		if (!zram_allocated(zram, index) ||
-			  !zram_test_flag(zram, index, ZRAM_IDLE)) {
-			zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-			zram_clear_flag(zram, index, ZRAM_IDLE);
-			zram_clear_idle_count(zram, index);
-			goto next;
-		}
-
-		zram_free_page(zram, index);
-		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
-		zram_set_flag(zram, index, ZRAM_WB);
-		zram_set_element(zram, index, blk_idx);
-		wb_pages_nr++;
+		batch_pages[nr_write].page = bvec.bv_page;
+		batch_pages[nr_write].index = index;
+		nr_write++;
 		blk_idx = 0;
-		atomic64_inc(&zram->stats.pages_stored);
-		spin_lock(&zram->wb_limit_lock);
-		if (zram->wb_limit_enable && zram->bd_wb_limit > 0)
-			zram->bd_wb_limit -=  1UL << (PAGE_SHIFT - 12);
-		spin_unlock(&zram->wb_limit_lock);
+		continue;
 next:
 		zram_slot_unlock(zram, index);
 	}
-
+	if (nr_write) {
+		wb_pages_nr += wait_for_writeback_batch(zram, start_blkidx,
+							nr_write, batch_pages);
+		flush_count++;
+	}
 	if (blk_idx)
 		free_block_bdev(zram, blk_idx);
-	__free_page(page);
+
 release_init_lock:
 	up_read(&zram->init_lock);
 
-	pr_info("Flush finished. Mode %d, flush %lu pages\n", mode, wb_pages_nr);
+	pr_info("Flush finished. Mode %d, flush %lu pages, flush count %d\n", mode, wb_pages_nr, flush_count);
 	return ret ? ret : len;
 }
 
@@ -1997,7 +2034,7 @@ static int __zram_bvec_write(struct zram *zram, struct bio_vec *bvec,
 	enum zram_pageflags flags = 0;
 #if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
 	struct mem_cgroup *memcg = page_memcg(page);
-	unsigned long android_oem_data1;
+	unsigned long long android_oem_data1;
 #endif
 
 	mem = kmap_atomic(page);
@@ -2116,7 +2153,7 @@ out:
 
 #if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
 	if (memory_freeze && memcg != NULL) {
-		android_oem_data1 = READ_ONCE(memcg->android_oem_data1);
+		android_oem_data1 = memcg->android_oem_data1[0];
 		if (android_oem_data1 == ANON_WRITEBACK_ENABLE)
 			zram_set_flag(zram, index, ZRAM_WRITEBACK_ENABLE);
 	}
@@ -2560,6 +2597,7 @@ static struct attribute *zram_disk_attrs[] = {
 #ifdef CONFIG_ZRAM_WRITEBACK
 	&dev_attr_bd_stat.attr,
 	&dev_attr_low_compress_ratio.attr,
+#endif
 #ifdef CONFIG_MI_MEMORY_FREEZE
 	&dev_attr_memory_freeze.attr,
 #endif
@@ -2599,6 +2637,12 @@ static int zram_add(void)
 	init_rwsem(&zram->init_lock);
 #ifdef CONFIG_ZRAM_WRITEBACK
 	spin_lock_init(&zram->wb_limit_lock);
+	zram->writeback_pages = alloc_pages(GFP_KERNEL, MAX_WRITEBACK_ORDER);
+	if (zram->writeback_pages)
+		split_page(zram->writeback_pages, MAX_WRITEBACK_ORDER);
+	else
+		pr_err("Error allocating writeback batch pages for device %d\n",
+			device_id);
 #endif
 
 	/* gendisk structure */
@@ -2670,6 +2714,10 @@ out_free_dev:
 static int zram_remove(struct zram *zram)
 {
 	bool claimed;
+#ifdef CONFIG_ZRAM_WRITEBACK
+	int i;
+#endif
+
 
 	mutex_lock(&zram->disk->open_mutex);
 	if (disk_openers(zram->disk)) {
@@ -2695,6 +2743,12 @@ static int zram_remove(struct zram *zram)
 		sync_blockdev(zram->disk->part0);
 		zram_reset_device(zram);
 	}
+
+#ifdef CONFIG_ZRAM_WRITEBACK
+	if (zram->writeback_pages)
+		for (i = 0; i < MAX_WRITEBACK_SIZE; i++)
+			__free_page(zram->writeback_pages + i);
+#endif
 
 	pr_info("Removed device: %s\n", zram->disk->disk_name);
 
@@ -2806,7 +2860,7 @@ static u64 mem_cgroup_anno_writeback_enable_read(struct cgroup_subsys_state *css
 {
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
-	return memcg->android_oem_data1;
+	return memcg->android_oem_data1[0];
 }
 
 static int mem_cgroup_anno_writeback_enable_write(struct cgroup_subsys_state *css,
@@ -2815,7 +2869,7 @@ static int mem_cgroup_anno_writeback_enable_write(struct cgroup_subsys_state *cs
 	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
 
 	if (css->parent)
-		memcg->android_oem_data1 = !!val;
+		memcg->android_oem_data1[0] = !!val;
 
 	return 0;
 }
