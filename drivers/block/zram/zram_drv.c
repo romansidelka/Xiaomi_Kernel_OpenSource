@@ -64,8 +64,10 @@ static const struct block_device_operations zram_devops;
 /* default_time_list for page life statics and the unit is seconds */
 static  int default_time_list[] = {60, 120, 180, 300, 600};
 #endif
-
-static unsigned int  glow_compress_ratio = 50;
+static unsigned int glow_compress_ratio = 75;
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+static unsigned int memory_freeze = 1;
+#endif
 static void zram_free_page(struct zram *zram, size_t index);
 static int zram_bvec_read(struct zram *zram, struct bio_vec *bvec,
 				u32 index, int offset, struct bio *bio);
@@ -347,21 +349,20 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 		zram_slot_lock(zram, index);
 		if (zram_get_obj_size(zram, index) &&
 				zram_test_flag(zram, index, ZRAM_COMPRESS_LOW) &&
-#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
-				zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE) &&
-#endif
 				!zram_test_flag(zram, index, ZRAM_UNDER_WB) &&
 				!zram_test_flag(zram, index, ZRAM_WB)) {
-#ifdef CONFIG_ZRAM_MEMORY_TRACKING
-			is_idle = !cutoff || ktime_after(cutoff, zram->table[index].ac_time);
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+			if (!memory_freeze || 
+				zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE)) {
 #endif
-			zram_inc_idle_count(zram, index);
-			if (!zram_test_flag(zram, index, ZRAM_IDLE)){
-				zram_set_flag(zram, index, ZRAM_IDLE);
-				mark_nr++;
-			}
-			if (is_idle)
-				zram_set_flag(zram, index, ZRAM_IDLE);				
+					zram_inc_idle_count(zram, index);
+					if (!zram_test_flag(zram, index, ZRAM_IDLE)) {
+						zram_set_flag(zram, index, ZRAM_IDLE);
+						mark_nr++;
+					}
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+                        }
+#endif
 		}
 		zram_slot_unlock(zram, index);
 	}
@@ -434,6 +435,34 @@ static ssize_t new_store(struct device *dev,
 
 	return len;
 }
+
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+static ssize_t memory_freeze_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	unsigned int  val;
+	ssize_t ret = -EINVAL;
+
+	if (kstrtouint(buf, 10, &val))
+		return ret;
+
+	down_read(&zram->init_lock);
+	spin_lock(&zram->wb_limit_lock);
+	memory_freeze = !!val;
+	spin_unlock(&zram->wb_limit_lock);
+	up_read(&zram->init_lock);
+	ret = len;
+
+	return ret;
+}
+
+static ssize_t memory_freeze_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", memory_freeze);
+}
+#endif
 
 #ifdef CONFIG_ZRAM_WRITEBACK
 static ssize_t low_compress_ratio_store(struct device *dev,
@@ -909,8 +938,9 @@ static ssize_t writeback_store(struct device *dev,
 		if (mode & HUGE_WRITEBACK &&
 			  !zram_test_flag(zram, index, ZRAM_HUGE))
 			goto next;
-#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
-		if (!zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE))
+#ifdef CONFIG_MI_MEMORY_FREEZE
+		if (memory_freeze && 
+			  !zram_test_flag(zram, index, ZRAM_WRITEBACK_ENABLE))
 			goto next;
 #endif
 		/*
@@ -1736,6 +1766,9 @@ static DEVICE_ATTR_RO(new_stat);
 #ifdef CONFIG_ZRAM_WRITEBACK
 static DEVICE_ATTR_RO(bd_stat);
 static DEVICE_ATTR_RW(low_compress_ratio);
+#ifdef CONFIG_MI_MEMORY_FREEZE
+static DEVICE_ATTR_RW(memory_freeze);
+#endif
 #ifdef CONFIG_MIUI_ZRAM_MEMORY_TRACKING
 static DEVICE_ATTR_RO(wb_pages_max);
 #endif
@@ -2082,11 +2115,10 @@ out:
 	}
 
 #if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
-	if (memcg != NULL) {
+	if (memory_freeze && memcg != NULL) {
 		android_oem_data1 = READ_ONCE(memcg->android_oem_data1);
-		if (android_oem_data1 == ANON_WRITEBACK_ENABLE) {
+		if (android_oem_data1 == ANON_WRITEBACK_ENABLE)
 			zram_set_flag(zram, index, ZRAM_WRITEBACK_ENABLE);
-		}
 	}
 #endif
 
@@ -2528,6 +2560,8 @@ static struct attribute *zram_disk_attrs[] = {
 #ifdef CONFIG_ZRAM_WRITEBACK
 	&dev_attr_bd_stat.attr,
 	&dev_attr_low_compress_ratio.attr,
+#ifdef CONFIG_MI_MEMORY_FREEZE
+	&dev_attr_memory_freeze.attr,
 #endif
 #ifdef CONFIG_MIUI_ZRAM_MEMORY_TRACKING
 	&dev_attr_wb_pages_max.attr,
