@@ -331,12 +331,20 @@ DECLARE_RESTRICTED_HOOK(android_rvh_find_energy_efficient_cpu,
 DECLARE_HOOK(android_vh_sched_pelt_multiplier,
 	TP_PROTO(unsigned int old, unsigned int cur, int *ret),
 	TP_ARGS(old, cur, ret));
+
+#if IS_ENABLED(CONFIG_MTK_MBRAINK_EXPORT_DEPENDED)
 DECLARE_HOOK(android_vh_do_fork,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p));
 DECLARE_HOOK(android_vh_do_exit,
 	TP_PROTO(struct task_struct *p),
 	TP_ARGS(p));
+#endif
+
+DECLARE_HOOK(android_vh_map_util_freq,
+	TP_PROTO(unsigned long util, unsigned long freq,
+		unsigned long cap, unsigned long *next_freq),
+	TP_ARGS(util, freq, cap, next_freq));
 
 /* macro versions of hooks are no longer required */
 
