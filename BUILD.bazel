@@ -12,23 +12,33 @@ package(
     ],
 )
 
-_aarch64_additional_kmi_symbol_lists = [
-    # keep sorted
-    "android/abi_gki_aarch64_db845c",
-    "android/abi_gki_aarch64_galaxy",
-    "android/abi_gki_aarch64_pixel",
-    "android/abi_gki_aarch64_qcom",
-    "android/abi_gki_aarch64_virtual_device",
-]
+filegroup(
+    name = "aarch64_additional_kmi_symbol_lists",
+    srcs = [
+        # keep sorted
+        "android/abi_gki_aarch64_db845c",
+        "android/abi_gki_aarch64_exynos",
+        "android/abi_gki_aarch64_galaxy",
+        "android/abi_gki_aarch64_imx",
+        "android/abi_gki_aarch64_mtk",
+        "android/abi_gki_aarch64_oplus",
+        "android/abi_gki_aarch64_pixel",
+        "android/abi_gki_aarch64_qcom",
+        "android/abi_gki_aarch64_virtual_device",
+        "android/abi_gki_aarch64_vivo",
+        "android/abi_gki_aarch64_xiaomi",
+    ],
+    visibility = ["//visibility:public"],
+)
 
 define_common_kernels(target_configs = {
     "kernel_aarch64": {
         "kmi_symbol_list_strict_mode": True,
         "module_implicit_outs": COMMON_GKI_MODULES_LIST,
         "kmi_symbol_list": "android/abi_gki_aarch64",
-        "additional_kmi_symbol_lists": _aarch64_additional_kmi_symbol_lists,
-        "protected_exports_list": "android/abi_gki_protected_exports",
-        "protected_modules_list": "android/gki_protected_modules",
+        "additional_kmi_symbol_lists": [":aarch64_additional_kmi_symbol_lists"],
+        "protected_exports_list": "android/abi_gki_protected_exports_aarch64",
+        "protected_modules_list": "android/gki_aarch64_protected_modules",
     },
     "kernel_aarch64_16k": {
         "kmi_symbol_list_strict_mode": False,
@@ -38,9 +48,9 @@ define_common_kernels(target_configs = {
         "kmi_symbol_list_strict_mode": False,
         "module_implicit_outs": COMMON_GKI_MODULES_LIST,
         "kmi_symbol_list": "android/abi_gki_aarch64",
-        "additional_kmi_symbol_lists": _aarch64_additional_kmi_symbol_lists,
-        "protected_exports_list": "android/abi_gki_protected_exports",
-        "protected_modules_list": "android/gki_protected_modules",
+        "additional_kmi_symbol_lists": [":aarch64_additional_kmi_symbol_lists"],
+        "protected_exports_list": "android/abi_gki_protected_exports_aarch64",
+        "protected_modules_list": "android/gki_aarch64_protected_modules",
     },
     "kernel_riscv64": {
         "kmi_symbol_list_strict_mode": False,
@@ -49,10 +59,14 @@ define_common_kernels(target_configs = {
     "kernel_x86_64": {
         "kmi_symbol_list_strict_mode": False,
         "module_implicit_outs": COMMON_GKI_MODULES_LIST,
+        "protected_exports_list": "android/abi_gki_protected_exports_x86_64",
+        "protected_modules_list": "android/gki_x86_64_protected_modules",
     },
     "kernel_x86_64_debug": {
         "kmi_symbol_list_strict_mode": False,
         "module_implicit_outs": COMMON_GKI_MODULES_LIST,
+        "protected_exports_list": "android/abi_gki_protected_exports_x86_64",
+        "protected_modules_list": "android/gki_x86_64_protected_modules",
     },
 })
 
@@ -580,25 +594,11 @@ load("//build/kernel/kleaf:constants.bzl",
     "DEFAULT_GKI_OUTS",
 )
 
-mgk_module_outs = [
-    "drivers/firmware/arm_ffa/ffa-module.ko",
-    "drivers/gpu/drm/display/drm_display_helper.ko",
-    "drivers/gpu/drm/drm_dma_helper.ko",
-    "drivers/iio/buffer/industrialio-triggered-buffer.ko",
-    "drivers/iio/buffer/kfifo_buf.ko",
-    "drivers/leds/leds-pwm.ko",
-    "drivers/media/v4l2-core/v4l2-async.ko",
-    "drivers/media/v4l2-core/v4l2-flash-led-class.ko",
-    "drivers/media/v4l2-core/v4l2-fwnode.ko",
-    "drivers/perf/arm_dsu_pmu.ko",
-    "drivers/phy/mediatek/phy-mtk-mipi-dsi-drv.ko",
-    "drivers/power/reset/reboot-mode.ko",
-    "drivers/power/reset/syscon-reboot-mode.ko",
-    "drivers/tee/tee.ko",
-    "drivers/thermal/thermal-generic-adc.ko",
-    "fs/pstore/pstore_blk.ko",
-    "fs/pstore/pstore_zone.ko",
-]
+load(":mgk_modules.bzl",
+     "mgk_module_outs",
+     "mgk_module_eng_outs",
+     "mgk_module_userdebug_outs",
+     "mgk_module_user_outs")
 
 kernel_build(
     name = "kernel_aarch64.eng",
@@ -609,7 +609,7 @@ kernel_build(
     build_config = "//kernel_device_modules-6.1:build_config.eng",
     kconfig_ext = "//kernel_device_modules-6.1:Kconfig.ext",
     outs = DEFAULT_GKI_OUTS,
-    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs,
+    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs + mgk_module_eng_outs,
     base_kernel = None,
     trim_nonlisted_kmi = False,
 )
@@ -623,7 +623,7 @@ kernel_build(
     build_config = "//kernel_device_modules-6.1:build_config.userdebug",
     kconfig_ext = "//kernel_device_modules-6.1:Kconfig.ext",
     outs = DEFAULT_GKI_OUTS,
-    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs,
+    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs + mgk_module_userdebug_outs,
     base_kernel = None,
     trim_nonlisted_kmi = False,
 )
@@ -637,7 +637,7 @@ kernel_build(
     build_config = "//kernel_device_modules-6.1:build_config.user",
     kconfig_ext = "//kernel_device_modules-6.1:Kconfig.ext",
     outs = DEFAULT_GKI_OUTS,
-    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs,
+    module_outs = COMMON_GKI_MODULES_LIST + mgk_module_outs + mgk_module_user_outs,
     base_kernel = None,
     trim_nonlisted_kmi = False,
 )
