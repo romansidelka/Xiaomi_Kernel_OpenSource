@@ -53,6 +53,15 @@ enum zram_pageflags {
 	__NR_ZRAM_PAGEFLAGS,
 };
 
+#define ZRAM_WB_IDLE_SHIFT (__NR_ZRAM_PAGEFLAGS)
+
+#define ZRAM_WB_IDLE_BITS_LEN (4U)
+
+#define ZRAM_WB_IDLE_MIN (1U)
+#define ZRAM_WB_IDLE_MAX (10U)
+
+#define ZRAM_WB_IDLE_DEFAULT ZRAM_WB_IDLE_MIN
+
 /*-- Data structures */
 
 /* Allocated for each disk page */
