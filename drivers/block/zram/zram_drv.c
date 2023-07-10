@@ -666,13 +666,25 @@ static int read_from_bdev_async(struct zram *zram, struct bio_vec *bvec,
 #define HUGE_WRITEBACK (1<<0)
 #define IDLE_WRITEBACK (1<<1)
 
+/* Returns true on success, false on parsing error. */
+static inline bool writeback_parse_input(const char *buf, unsigned long *wb_max)
+{
+	const char *str_prefix = "idle ";
+	int str_len = strlen(str_prefix);
+
+	if (strncmp(buf, str_prefix, str_len) ||
+	    kstrtoul(buf + str_len, 10, wb_max))
+		return false;
+
+	return true;
+}
 
 static ssize_t writeback_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
 {
 	struct zram *zram = dev_to_zram(dev);
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
-	unsigned long index = 0;
+	unsigned long index = 0, wb_max = ULONG_MAX;
 	struct bio bio;
 	struct bio_vec bio_vec;
 	struct page *page;
@@ -680,7 +692,9 @@ static ssize_t writeback_store(struct device *dev,
 	int mode, err;
 	unsigned long blk_idx = 0, wb_pages_nr = 0;
 
-	if (sysfs_streq(buf, "idle"))
+	if (writeback_parse_input(buf, &wb_max))
+		mode = IDLE_WRITEBACK;
+	else if (sysfs_streq(buf, "idle"))
 		mode = IDLE_WRITEBACK;
 	else if (sysfs_streq(buf, "huge"))
 		mode = HUGE_WRITEBACK;
@@ -717,6 +731,9 @@ static ssize_t writeback_store(struct device *dev,
 
 	for (; nr_pages != 0; index++, nr_pages--) {
 		struct bio_vec bvec;
+
+			if (wb_pages_nr >= wb_max)
+					break;
 
 						/*
 		 * If the writeback thread is running and we receive the
@@ -847,7 +864,7 @@ release_init_lock:
 	up_read(&zram->init_lock);
 
 	pr_info("Flush finished. Mode %d, flush %lu pages\n", mode, wb_pages_nr);
-	return ret;
+	return ret ? ret : len;
 }
 
 struct zram_work {
