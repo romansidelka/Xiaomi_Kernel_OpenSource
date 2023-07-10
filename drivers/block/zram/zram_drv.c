@@ -358,6 +358,34 @@ out:
 	return rv;
 }
 
+static ssize_t new_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t len)
+{
+	struct zram *zram = dev_to_zram(dev);
+	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
+	unsigned int index;
+
+	if (!sysfs_streq(buf, "all"))
+		return -EINVAL;
+
+	down_read(&zram->init_lock);
+
+	if (!init_done(zram)) {
+		up_read(&zram->init_lock);
+		return -EINVAL;
+	}
+
+	for (index = 0; index < nr_pages; index++) {
+		zram_slot_lock(zram, index);
+		zram_clear_flag(zram, index, ZRAM_IDLE);
+		zram_slot_unlock(zram, index);
+	}
+
+	up_read(&zram->init_lock);
+
+	return len;
+}
+
 #ifdef CONFIG_ZRAM_WRITEBACK
 static ssize_t writeback_limit_enable_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t len)
@@ -1117,6 +1145,49 @@ static ssize_t mm_stat_show(struct device *dev,
 	return ret;
 }
 
+static ssize_t get_idle_or_new_pages(struct zram *zram,
+					char *buf, const bool idle)
+{
+	unsigned long index, nr_pages = zram->disksize >> PAGE_SHIFT;
+	unsigned long pages_nr = 0;
+	ssize_t ret = -EINVAL;
+
+	down_read(&zram->init_lock);
+
+	if (!init_done(zram))
+		goto out;
+
+	for (index = 0; index < nr_pages; index++) {
+		zram_slot_lock(zram, index);
+
+		if (zram_get_obj_size(zram, index) ||
+				zram_test_flag(zram, index, ZRAM_SAME)) {
+			if (idle == zram_test_flag(zram, index, ZRAM_IDLE))
+				pages_nr++;
+		}
+
+		zram_slot_unlock(zram, index);
+	}
+
+	ret = scnprintf(buf, PAGE_SIZE, "%lu\n", pages_nr);
+
+out:
+	up_read(&zram->init_lock);
+	return ret;
+}
+
+static ssize_t idle_stat_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return get_idle_or_new_pages(dev_to_zram(dev), buf, true);
+}
+
+static ssize_t new_stat_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return get_idle_or_new_pages(dev_to_zram(dev), buf, false);
+}
+
 #ifdef CONFIG_ZRAM_WRITEBACK
 #define FOUR_K(x) ((x) * (1 << (PAGE_SHIFT - 12)))
 static ssize_t bd_stat_show(struct device *dev,
@@ -1157,6 +1228,8 @@ static ssize_t debug_stat_show(struct device *dev,
 
 static DEVICE_ATTR_RO(io_stat);
 static DEVICE_ATTR_RO(mm_stat);
+static DEVICE_ATTR_RO(idle_stat);
+static DEVICE_ATTR_RO(new_stat);
 #ifdef CONFIG_ZRAM_WRITEBACK
 static DEVICE_ATTR_RO(bd_stat);
 #endif
@@ -1858,6 +1931,7 @@ static DEVICE_ATTR_WO(reset);
 static DEVICE_ATTR_WO(mem_limit);
 static DEVICE_ATTR_WO(mem_used_max);
 static DEVICE_ATTR_WO(idle);
+static DEVICE_ATTR_WO(new);
 static DEVICE_ATTR_RW(max_comp_streams);
 static DEVICE_ATTR_RW(comp_algorithm);
 #ifdef CONFIG_ZRAM_WRITEBACK
@@ -1875,6 +1949,7 @@ static struct attribute *zram_disk_attrs[] = {
 	&dev_attr_mem_limit.attr,
 	&dev_attr_mem_used_max.attr,
 	&dev_attr_idle.attr,
+	&dev_attr_new.attr,
 	&dev_attr_max_comp_streams.attr,
 	&dev_attr_comp_algorithm.attr,
 #ifdef CONFIG_ZRAM_WRITEBACK
@@ -1885,6 +1960,8 @@ static struct attribute *zram_disk_attrs[] = {
 #endif
 	&dev_attr_io_stat.attr,
 	&dev_attr_mm_stat.attr,
+	&dev_attr_idle_stat.attr,
+	&dev_attr_new_stat.attr,
 #ifdef CONFIG_ZRAM_WRITEBACK
 	&dev_attr_bd_stat.attr,
 #endif
