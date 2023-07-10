@@ -48,6 +48,7 @@ enum zram_pageflags {
 	ZRAM_WB,	/* page is stored on backing_device */
 	ZRAM_UNDER_WB,	/* page is under writeback */
 	ZRAM_HUGE,	/* Incompressible page */
+	ZRAM_COMPRESS_LOW, /*lower than aim compaction ratio */
 	ZRAM_IDLE,	/* not accessed page since last idle marking */
 
 	__NR_ZRAM_PAGEFLAGS,
@@ -88,6 +89,7 @@ struct zram_stats {
 	atomic64_t huge_pages;		/* no. of huge pages */
 	atomic64_t huge_pages_since;	/* no. of huge pages since zram set up */
 	atomic64_t pages_stored;	/* no. of pages currently stored */
+	atomic64_t lowratio_pages;
 #ifdef CONFIG_MIUI_ZRAM_MEMORY_TRACKING
 	atomic64_t origin_pages_max;	/* no. of maximum origin pages stored */
 #endif
