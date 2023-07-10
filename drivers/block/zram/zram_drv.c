@@ -12,7 +12,7 @@
  *
  */
 
-#define KMSG_COMPONENT "zram"
+#define KMSG_COMPONENT "ExtM"
 #define pr_fmt(fmt) KMSG_COMPONENT ": " fmt
 
 #include <linux/module.h>
@@ -295,7 +295,7 @@ static ssize_t mem_used_max_store(struct device *dev,
  */
 static void mark_idle(struct zram *zram, ktime_t cutoff)
 {
-	int is_idle = 1;
+	int is_idle = 1, mark_nr = 0;
 	unsigned long nr_pages = zram->disksize >> PAGE_SHIFT;
 	int index;
 
@@ -310,11 +310,14 @@ static void mark_idle(struct zram *zram, ktime_t cutoff)
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 			is_idle = !cutoff || ktime_after(cutoff, zram->table[index].ac_time);
 #endif
+			if (!zram_test_flag(zram, index, ZRAM_IDLE))
+				mark_nr++;
 			if (is_idle)
-				zram_set_flag(zram, index, ZRAM_IDLE);
+				zram_set_flag(zram, index, ZRAM_IDLE);				
 		}
 		zram_slot_unlock(zram, index);
 	}
+	pr_info("Mark IDLE finished. Mark %d pages\n", mark_nr);
 }
 
 static ssize_t idle_store(struct device *dev,
@@ -645,7 +648,7 @@ static ssize_t writeback_store(struct device *dev,
 	struct page *page;
 	ssize_t ret = len;
 	int mode, err;
-	unsigned long blk_idx = 0;
+	unsigned long blk_idx = 0, wb_pages_nr = 0;
 
 	if (sysfs_streq(buf, "idle"))
 		mode = IDLE_WRITEBACK;
@@ -782,6 +785,7 @@ static ssize_t writeback_store(struct device *dev,
 		zram_clear_flag(zram, index, ZRAM_UNDER_WB);
 		zram_set_flag(zram, index, ZRAM_WB);
 		zram_set_element(zram, index, blk_idx);
+		wb_pages_nr++;
 		blk_idx = 0;
 		atomic64_inc(&zram->stats.pages_stored);
 		spin_lock(&zram->wb_limit_lock);
@@ -798,6 +802,7 @@ next:
 release_init_lock:
 	up_read(&zram->init_lock);
 
+	pr_info("Flush finished. Mode %d, flush %lu pages\n", mode, wb_pages_nr);
 	return ret;
 }
 
