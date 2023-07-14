@@ -316,7 +316,7 @@ static int __init gate_vma_init(void)
 	gate_vma.vm_page_prot = PAGE_READONLY_EXEC;
 	gate_vma.vm_start = 0xffff0000;
 	gate_vma.vm_end	= 0xffff0000 + PAGE_SIZE;
-	gate_vma.vm_flags = VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYEXEC;
+	vm_flags_init(&gate_vma, VM_READ | VM_EXEC | VM_MAYREAD | VM_MAYEXEC);
 	return 0;
 }
 arch_initcall(gate_vma_init);
@@ -344,9 +344,6 @@ const char *arch_vma_name(struct vm_area_struct *vma)
 {
 	return is_gate_vma(vma) ? "[vectors]" : NULL;
 }
-#if IS_ENABLED(CONFIG_MTK_MBRAINK_EXPORT_DEPENDED)
-EXPORT_SYMBOL(arch_vma_name);
-#endif
 
 /* If possible, provide a placement hint at a random offset from the
  * stack for the sigpage and vdso pages.

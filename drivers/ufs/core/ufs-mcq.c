@@ -12,36 +12,31 @@
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include "ufshcd-priv.h"
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 #include <linux/delay.h>
 #include <scsi/scsi_cmnd.h>
 #include <linux/bitfield.h>
 #include <linux/iopoll.h>
-#endif
 
 #define MAX_QUEUE_SUP GENMASK(7, 0)
 #define UFS_MCQ_MIN_RW_QUEUES 2
 #define UFS_MCQ_MIN_READ_QUEUES 0
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-#define UFS_MCQ_MAX_DEV_CMD_QUEUES 1
-#define UFS_MCQ_MIN_DEV_CMD_QUEUES 0
-#else
+#if !IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 #define UFS_MCQ_NUM_DEV_CMD_QUEUES 1
 #endif
 #define UFS_MCQ_MIN_POLL_QUEUES 0
 #define QUEUE_EN_OFFSET 31
 #define QUEUE_ID_OFFSET 16
 
+#if !IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 #define MAX_DEV_CMD_ENTRIES	2
+#endif
 #define MCQ_CFG_MAC_MASK	GENMASK(16, 8)
 #define MCQ_QCFG_SIZE		0x40
 #define MCQ_ENTRY_SIZE_IN_DWORD	8
 #define CQE_UCD_BA GENMASK_ULL(63, 7)
 
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 /* Max mcq register polling time in microseconds */
 #define MCQ_POLL_US 500000
-#endif
 
 static int rw_queue_count_set(const char *val, const struct kernel_param *kp)
 {
@@ -91,24 +86,6 @@ module_param_cb(poll_queues, &poll_queue_count_ops, &poll_queues, 0644);
 MODULE_PARM_DESC(poll_queues,
 		 "Number of poll queues used for r/w. Default value is 1");
 
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-static int dev_cmd_queue_count_set(const char *val, const struct kernel_param *kp)
-{
-	return param_set_uint_minmax(val, kp,
-				     UFS_MCQ_MIN_DEV_CMD_QUEUES,
-				     UFS_MCQ_MAX_DEV_CMD_QUEUES);
-}
-
-static const struct kernel_param_ops dev_cmd_queue_count_ops = {
-	.set = dev_cmd_queue_count_set,
-	.get = param_get_uint,
-};
-
-unsigned int dev_cmd_queues = 1;
-module_param_cb(dev_cmd_queues, &dev_cmd_queue_count_ops, &dev_cmd_queues, 0644);
-MODULE_PARM_DESC(dev_cmd_queues,
-		 "Number of queues used for dev command. Default value is 1");
-#endif
 /**
  * ufshcd_mcq_config_mac - Set the #Max Activ Cmds.
  * @hba: per adapter instance
@@ -145,12 +122,13 @@ struct ufs_hw_queue *ufshcd_mcq_req_to_hwq(struct ufs_hba *hba,
 	u32 utag = blk_mq_unique_tag(req);
 	u32 hwq = blk_mq_unique_tag_to_hwq(utag);
 
-	/* uhq[0] is used to serve device commands */
 #if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-	return &hba->uhq[hwq + dev_cmd_queues];
+	return &hba->uhq[hwq];
 #else
+	/* uhq[0] is used to serve device commands */
 	return &hba->uhq[hwq + UFSHCD_MCQ_IO_QUEUE_OFFSET];
 #endif
+
 }
 
 /**
@@ -191,16 +169,12 @@ static int ufshcd_mcq_config_nr_queues(struct ufs_hba *hba)
 	u32 hba_maxq, rem, tot_queues;
 	struct Scsi_Host *host = hba->host;
 
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 	/* maxq is 0 based value */
 	hba_maxq = FIELD_GET(MAX_QUEUE_SUP, hba->mcq_capabilities) + 1;
 
-	tot_queues = dev_cmd_queues + read_queues + poll_queues +
-				rw_queues;
-
+#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
+	tot_queues = read_queues + poll_queues + rw_queues;
 #else
-	hba_maxq = FIELD_GET(MAX_QUEUE_SUP, hba->mcq_capabilities);
-
 	tot_queues = UFS_MCQ_NUM_DEV_CMD_QUEUES + read_queues + poll_queues +
 			rw_queues;
 #endif
@@ -210,9 +184,8 @@ static int ufshcd_mcq_config_nr_queues(struct ufs_hba *hba)
 			tot_queues, hba_maxq);
 		return -EOPNOTSUPP;
 	}
-
 #if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-	rem = hba_maxq - dev_cmd_queues;
+	rem = hba_maxq;
 #else
 	rem = hba_maxq - UFS_MCQ_NUM_DEV_CMD_QUEUES;
 #endif
@@ -242,7 +215,7 @@ static int ufshcd_mcq_config_nr_queues(struct ufs_hba *hba)
 		host->nr_hw_queues += hba->nr_queues[i];
 
 #if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-	hba->nr_hw_queues = host->nr_hw_queues + dev_cmd_queues;
+	hba->nr_hw_queues = host->nr_hw_queues;
 #else
 	hba->nr_hw_queues = host->nr_hw_queues + UFS_MCQ_NUM_DEV_CMD_QUEUES;
 #endif
@@ -325,29 +298,43 @@ static int ufshcd_mcq_get_tag(struct ufs_hba *hba,
 	/* Bits 63:7 UCD base address, 6:5 are reserved, 4:0 is SQ ID */
 	addr = (le64_to_cpu(cqe->command_desc_base_addr) & CQE_UCD_BA) -
 		hba->ucdl_dma_addr;
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
+
 	return div_u64(addr, ufshcd_get_ucd_size(hba));
-#else
-	return div_u64(addr, sizeof_utp_transfer_cmd_desc(hba));
-#endif
 }
 
 static void ufshcd_mcq_process_cqe(struct ufs_hba *hba,
-					    struct ufs_hw_queue *hwq)
+				   struct ufs_hw_queue *hwq)
 {
 	struct cq_entry *cqe = ufshcd_mcq_cur_cqe(hwq);
 	int tag = ufshcd_mcq_get_tag(hba, hwq, cqe);
 
-	ufshcd_compl_one_cqe(hba, tag, cqe);
+	if (cqe->command_desc_base_addr) {
+		ufshcd_compl_one_cqe(hba, tag, cqe);
+		/* After processed the cqe, mark it empty (invalid) entry */
+		cqe->command_desc_base_addr = 0;
+	}
 }
 
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-static unsigned long ufshcd_mcq_poll_cqe_nolock(struct ufs_hba *hba,
-						struct ufs_hw_queue *hwq)
-#else
+void ufshcd_mcq_compl_all_cqes_lock(struct ufs_hba *hba,
+				    struct ufs_hw_queue *hwq)
+{
+	unsigned long flags;
+	u32 entries = hwq->max_entries;
+
+	spin_lock_irqsave(&hwq->cq_lock, flags);
+	while (entries > 0) {
+		ufshcd_mcq_process_cqe(hba, hwq);
+		ufshcd_mcq_inc_cq_head_slot(hwq);
+		entries--;
+	}
+
+	ufshcd_mcq_update_cq_tail_slot(hwq);
+	hwq->cq_head_slot = hwq->cq_tail_slot;
+	spin_unlock_irqrestore(&hwq->cq_lock, flags);
+}
+
 unsigned long ufshcd_mcq_poll_cqe_nolock(struct ufs_hba *hba,
-					 struct ufs_hw_queue *hwq)
-#endif
+						struct ufs_hw_queue *hwq)
 {
 	unsigned long completed_reqs = 0;
 
@@ -363,11 +350,8 @@ unsigned long ufshcd_mcq_poll_cqe_nolock(struct ufs_hba *hba,
 
 	return completed_reqs;
 }
-#if !IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 EXPORT_SYMBOL_GPL(ufshcd_mcq_poll_cqe_nolock);
-#endif
 
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
 				       struct ufs_hw_queue *hwq)
 {
@@ -380,19 +364,6 @@ unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
 	return completed_reqs;
 }
 EXPORT_SYMBOL_GPL(ufshcd_mcq_poll_cqe_lock);
-#else
-unsigned long ufshcd_mcq_poll_cqe_lock(struct ufs_hba *hba,
-				       struct ufs_hw_queue *hwq)
-{
-	unsigned long completed_reqs;
-
-	spin_lock(&hwq->cq_lock);
-	completed_reqs = ufshcd_mcq_poll_cqe_nolock(hba, hwq);
-	spin_unlock(&hwq->cq_lock);
-
-	return completed_reqs;
-}
-#endif
 
 void ufshcd_mcq_make_queues_operational(struct ufs_hba *hba)
 {
@@ -508,16 +479,12 @@ int ufshcd_mcq_init(struct ufs_hba *hba)
 		hwq->max_entries = hba->nutrs;
 		spin_lock_init(&hwq->sq_lock);
 		spin_lock_init(&hwq->cq_lock);
+		mutex_init(&hwq->sq_mutex);
 	}
 
 	/* The very first HW queue serves device commands */
 	hba->dev_cmd_queue = &hba->uhq[0];
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
-	if (dev_cmd_queues) {
-		/* Give dedicated dev_cmd_queue the minimal number of entries */
-		hba->dev_cmd_queue->max_entries = MAX_DEV_CMD_ENTRIES;
-	}
-#else
+#if !IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
 	/* Give dev_cmd_queue the minimal number of entries */
 	hba->dev_cmd_queue->max_entries = MAX_DEV_CMD_ENTRIES;
 #endif
@@ -525,7 +492,7 @@ int ufshcd_mcq_init(struct ufs_hba *hba)
 	host->host_tagset = 1;
 	return 0;
 }
-#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG)
+
 static int ufshcd_mcq_sq_stop(struct ufs_hba *hba, struct ufs_hw_queue *hwq)
 {
 	void __iomem *reg;
@@ -594,7 +561,7 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 
 	id = hwq->id;
 
-	spin_lock(&hwq->sq_lock);
+	mutex_lock(&hwq->sq_mutex);
 
 	/* stop the SQ fetching before working on it */
 	err = ufshcd_mcq_sq_stop(hba, hwq);
@@ -622,7 +589,7 @@ int ufshcd_mcq_sq_cleanup(struct ufs_hba *hba, int task_tag)
 		err = -ETIMEDOUT;
 
 unlock:
-	spin_unlock(&hwq->sq_lock);
+	mutex_unlock(&hwq->sq_mutex);
 	return err;
 }
 
@@ -669,7 +636,7 @@ static bool ufshcd_mcq_sqe_search(struct ufs_hba *hba,
 	if (hba->quirks & UFSHCD_QUIRK_MCQ_BROKEN_RTC)
 		return true;
 
-	spin_lock(&hwq->sq_lock);
+	mutex_lock(&hwq->sq_mutex);
 
 	ufshcd_mcq_sq_stop(hba, hwq);
 	sq_head_slot = ufshcd_mcq_get_sq_head_slot(hwq);
@@ -693,7 +660,7 @@ static bool ufshcd_mcq_sqe_search(struct ufs_hba *hba,
 
 out:
 	ufshcd_mcq_sq_start(hba, hwq);
-	spin_unlock(&hwq->sq_lock);
+	mutex_unlock(&hwq->sq_mutex);
 	return ret;
 }
 
@@ -756,4 +723,3 @@ int ufshcd_mcq_abort(struct scsi_cmnd *cmd)
 out:
 	return err;
 }
-#endif
