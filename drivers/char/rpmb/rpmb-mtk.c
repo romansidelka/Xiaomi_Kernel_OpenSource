@@ -225,6 +225,8 @@ int rpmb_cal_hmac(struct rpmb_frame *frame, int blk_cnt, u8 *key, u8 *key_mac)
 	u8 *buf, *buf_start;
 
 	buf = buf_start = kzalloc(284 * blk_cnt, 0);
+	if (!buf_start)
+		return -ENOMEM;
 
 	for (i = 0; i < blk_cnt; i++) {
 		memcpy(buf, frame[i].data, 284);
@@ -903,6 +905,10 @@ int rpmb_req_write_data_ufs(u8 *frame, u32 blk_cnt)
 
 #ifdef __RPMB_MTK_DEBUG_HMAC_VERIFY
 	key_mac = kzalloc(32, 0);
+	if (!key_mac) {
+		kfree(data.ocmd.frames);
+		return -ENOMEM;
+	}
 
 	rpmb_cal_hmac((struct rpmb_frame *)frame, blk_cnt, rpmb_key, key_mac);
 
@@ -933,14 +939,12 @@ int rpmb_req_write_data_ufs(u8 *frame, u32 blk_cnt)
 	MSG(DBG_INFO, "%s: result 0x%x\n", __func__,
 		cpu_to_be16(data.ocmd.frames->result));
 
-	kfree(data.ocmd.frames);
-
 	MSG(DBG_INFO, "%s: ret 0x%x\n", __func__, ret);
 
 #ifdef __RPMB_MTK_DEBUG_HMAC_VERIFY
 out:
 #endif
-
+	kfree(data.ocmd.frames);
 	return ret;
 }
 
@@ -3278,6 +3282,9 @@ static int dt_get_boot_type(void)
 int mmc_rpmb_register(struct mmc_host *mmc)
 {
 	int ret = 0;
+
+	if (!mmc)
+		return -EINVAL;
 
 	if (!(mmc->caps2 & MMC_CAP2_NO_MMC))
 		mtk_mmc_host[0] = mmc;
