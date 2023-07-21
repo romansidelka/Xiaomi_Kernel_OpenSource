@@ -2815,7 +2815,7 @@ module_init(mmdvfs_pmqos_late_init);
 arch_initcall_sync(mmdvfs_pmqos_init);
 #else
 late_initcall(mmdvfs_pmqos_late_init);
-module_init(mmdvfs_pmqos_init)
+module_init(mmdvfs_pmqos_init);
 #endif
 module_exit(mmdvfs_pmqos_exit);
 
