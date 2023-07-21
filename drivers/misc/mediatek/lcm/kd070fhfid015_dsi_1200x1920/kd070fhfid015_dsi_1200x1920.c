@@ -60,7 +60,6 @@
 #include <linux/debugfs.h>
 #include <linux/fs.h>
 #include <linux/seq_file.h>
-#include <linux/delay.h>
 #include <linux/module.h>
 #endif
 
@@ -183,7 +182,7 @@ struct LCM_setting_table {
 // ---------------------------------------------------------------------------
 //  Local Functions
 // ---------------------------------------------------------------------------
-static LCM_UTIL_FUNCS lcm_util;
+static struct LCM_UTIL_FUNCS lcm_util;
 
 #define MDELAY(n)		(lcm_util.mdelay(n))
 #define UDELAY(n)		(lcm_util.udelay(n))
@@ -439,16 +438,16 @@ end:
 // ---------------------------------------------------------------------------
 //  LCM Driver Implementations
 // ---------------------------------------------------------------------------
-static void lcm_set_util_funcs(const LCM_UTIL_FUNCS *util)
+static void lcm_set_util_funcs(const struct LCM_UTIL_FUNCS *util)
 {
-	memcpy(&lcm_util, util, sizeof(LCM_UTIL_FUNCS));
+	memcpy(&lcm_util, util, sizeof(struct LCM_UTIL_FUNCS));
 }
 
-static void lcm_get_params(LCM_PARAMS *params)
+static void lcm_get_params(struct LCM_PARAMS *params)
 {
 	LCM_LOGD("%s() enter\n", __func__);
 
-	memset(params, 0, sizeof(LCM_PARAMS));
+	memset(params, 0, sizeof(struct LCM_PARAMS));
 
 #ifdef BUILD_LK
 	params->dsi.edp_panel = 1;
@@ -763,7 +762,7 @@ static void lcm_setbacklight_cmdq(void *handle, unsigned int level)
 	push_table_cmdq(handle, bl_level, ARRAY_SIZE(bl_level), 1);
 }
 
-LCM_DRIVER kd070fhfid015_dsi_1200x1920_lcm_drv = {
+struct LCM_DRIVER kd070fhfid015_dsi_1200x1920_lcm_drv = {
 	.name           = PANEL_DRV_NAME,
 	.set_util_funcs = lcm_set_util_funcs,
 	.get_params     = lcm_get_params,
