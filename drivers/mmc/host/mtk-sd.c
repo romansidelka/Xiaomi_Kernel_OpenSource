@@ -656,7 +656,7 @@ static void msdc_retry(struct msdc_host *host, int addr, int val, int retry, int
 			cnt--;
 		}
 		if (cnt <= 0) {
-			retry--; mdelay(100); cnt = backup;
+			retry--; mdelay(1); cnt = backup;
 		}
 	}
 	if (retry == 0) {
@@ -1283,7 +1283,7 @@ static inline bool msdc_cmd_is_ready(struct msdc_host *host,
 		struct mmc_request *mrq, struct mmc_command *cmd)
 {
 	/* The max busy time we can endure is 20ms */
-	unsigned long tmo = jiffies + msecs_to_jiffies(CMD_TIMEOUT);
+	unsigned long tmo = jiffies + msecs_to_jiffies(20);
 
 	if (cmd->opcode == MMC_SEND_STATUS) {
 		while ((readl(host->base + SDC_STS) & SDC_STS_CMDBUSY) &&
