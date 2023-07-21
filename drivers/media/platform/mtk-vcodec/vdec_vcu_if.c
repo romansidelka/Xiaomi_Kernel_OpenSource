@@ -333,8 +333,9 @@ int vcu_dec_ipi_handler(void *data, unsigned int len, void *priv)
 			}
 			mtk_vcodec_debug(vcu, "- wait get fm pfb=0x%p\n", pfb);
 
-			vsi->dec.vdec_fb_va = (u64)(pfb->index + 1);
+			vsi->dec.vdec_fb_va = (u64)0;
 			if (pfb != NULL) {
+				vsi->dec.vdec_fb_va = (u64)(pfb->index + 1);
 				vsi->dec.index = pfb->index;
 				for (i = 0; i < pfb->num_planes; i++) {
 					vsi->dec.fb_dma[i] = (u64)
