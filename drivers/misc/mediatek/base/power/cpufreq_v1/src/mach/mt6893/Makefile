@@ -13,16 +13,15 @@
 
 ccflags-y +=	\
 	-I$(CPUFREQ_ROOT_DIR)/inc	\
-	-I$(CPUFREQ_ROOT_DIR)/src/mach/$(CONFIG_MTK_PLATFORM)	\
+	-I$(CPUFREQ_ROOT_DIR)/src/mach/mt6893	\
 	-I$(srctree)/drivers/misc/mediatek/base/power/include	\
-	-I$(srctree)/drivers/misc/mediatek/base/power/eem_v2/$(CONFIG_MTK_PLATFORM)/inc	\
+	-I$(srctree)/drivers/misc/mediatek/base/power/eem_v2/mt6893/inc	\
 	-I$(srctree)/drivers/misc/mediatek/freqhopping	\
 	-I$(srctree)/drivers/misc/mediatek/freqhopping/$(CONFIG_MTK_PLATFORM)
 
-ifeq ($(CONFIG_MTK_TINYSYS_SSPM_SUPPORT), y)
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/v1/
-ccflags-y += -I$(srctree)/drivers/misc/mediatek/sspm/mt6768
-ccflags-y += -DUSE_SSPM_VER_V1
+ifeq ($(CONFIG_MTK_TINYSYS_MCUPM_SUPPORT), y)
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/mcupm/
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/mcupm/mt6885/
 endif
 
 obj-y += mtk_cpufreq_platform.o
