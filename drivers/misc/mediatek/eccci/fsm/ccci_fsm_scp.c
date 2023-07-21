@@ -83,8 +83,8 @@ static void ccci_scp_md_state_sync_work(struct work_struct *work)
 	enum MD_STATE_FOR_USER state;
 	int count = 0;
 
-	if (!ctl) {
-		CCCI_ERROR_LOG(ctl->md_id, FSM, "%s ctl is NULL !\n", __func__);
+	if (ctl == NULL) {
+		CCCI_ERROR_LOG(-1, FSM, "%s ctl is NULL !\n", __func__);
 		return;
 	}
 
