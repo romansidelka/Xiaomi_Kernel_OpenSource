@@ -4519,12 +4519,12 @@ static int mt6357_rc_reset(int ch)
 	default:
 		break;
 	}
-	pr_info("%s(), reg: 0x%x(reg_shift), reg_reset: 0x%x\n",
+	pr_debug("%s(), reg: 0x%x(reg_shift), reg_reset: 0x%x\n",
 		__func__, reg, reg_shift, reg_reset);
 	usleep_range(500, 520);
 	reg_value = Ana_Get_Reg(reg);
 	rc = (reg_value >> reg_shift) & 0x1f;
-	pr_info("%s(), reg(rc) = 0x%x(0x%x)\n",
+	pr_debug("%s(), reg(rc) = 0x%x(0x%x)\n",
 		__func__, reg, reg_value, rc);
 	if ((rc == 0) || (rc == 0x1f)) {
 		/* Disable audio x ADC */
