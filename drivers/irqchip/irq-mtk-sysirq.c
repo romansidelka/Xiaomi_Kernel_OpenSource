@@ -107,13 +107,16 @@ static int mtk_sysirq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 {
 	int i;
 	irq_hw_number_t hwirq;
-	struct irq_fwspec *fwspec = arg;
-	struct irq_fwspec gic_fwspec = *fwspec;
+	struct irq_fwspec *fwspec;
+	struct irq_fwspec gic_fwspec;
 
 	if (!arg) {
 		pr_info("%s invalid args", __func__);
 		return -EINVAL;
 	}
+
+	fwspec = (struct irq_fwspec *)arg;
+	gic_fwspec = *fwspec;
 
 	if (fwspec->param_count != 3)
 		return -EINVAL;
