@@ -228,7 +228,7 @@ error_handle:
 	if (mtk_rpdev != NULL) {
 		device_unregister(&mtk_rpdev->rpdev.dev);
 		put_device(&mtk_rpdev->rpdev.dev);
-		mtk_rpdev == NULL;
+		mtk_rpdev = NULL;
 	}
 	if (ipi_chan_table != NULL) {
 		kfree(ipi_chan_table);
