@@ -489,6 +489,8 @@ mtk_drm_crtc_duplicate_state(struct drm_crtc *crtc)
 		state->rsz_dst_roi = old_state->rsz_dst_roi;
 		state->prop_val[CRTC_PROP_DOZE_ACTIVE] =
 			old_state->prop_val[CRTC_PROP_DOZE_ACTIVE];
+		state->prop_val[CRTC_PROP_PRES_FENCE_IDX] =
+			old_state->prop_val[CRTC_PROP_PRES_FENCE_IDX];
 	}
 
 	return &state->base;
