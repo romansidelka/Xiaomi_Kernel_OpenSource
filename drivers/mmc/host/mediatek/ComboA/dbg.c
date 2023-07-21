@@ -602,8 +602,7 @@ void msdc_dump_host_state(char **buff, unsigned long *size,
 
 	if (host->start_dma_time > host->stop_dma_time) {
 		SPREAD_PRINTF(buff, size, m,
-		"DMA pending DMA_CFG_SATUS(%d): start %llu, stop %llu\n",
-			MSDC_READ32(MSDC_DMA_CFG) & MSDC_DMA_CFG_STS,
+		"DMA start %llu, stop %llu\n",
 			host->start_dma_time, host->stop_dma_time);
 	}
 
