@@ -1287,6 +1287,10 @@ struct LCM_DRIVER *lcm_driver_list[] = {
 #if defined(NT36672C_FHDP_DSI_VDO_DSC_TXD_BOE)
 	&nt36672c_fhdp_dsi_vdo_dsc_txd_boe_lcm_drv,
 #endif
+
+#if defined(KD070FHFID015_DSI_1200X1920)
+	&kd070fhfid015_dsi_1200x1920_lcm_drv,
+#endif
 };
 
 unsigned char lcm_name_list[][128] = {
@@ -1362,6 +1366,10 @@ unsigned char lcm_name_list[][128] = {
 
 #if defined(OPPO_TIANMA_TD4310_FHDP_DSI_VDO_RT5081)
 	"oppo_tianma_td4310_fhdp_dsi_vdo_rt5081_drv",
+#endif
+
+#if defined(KD070FHFID015_DSI_1200X1920)
+	"kd070fhfid015_dsi_1200x1920",
 #endif
 };
 
