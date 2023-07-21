@@ -81,6 +81,11 @@ static int mtk_sysirq_domain_translate(struct irq_domain *d,
 				       unsigned long *hwirq,
 				       unsigned int *type)
 {
+	if (!fwspec || !hwirq || !type) {
+		pr_info("%s invalid args", __func__);
+		return -EINVAL;
+	}
+
 	if (is_of_node(fwspec->fwnode)) {
 		if (fwspec->param_count != 3)
 			return -EINVAL;
@@ -104,6 +109,11 @@ static int mtk_sysirq_domain_alloc(struct irq_domain *domain, unsigned int virq,
 	irq_hw_number_t hwirq;
 	struct irq_fwspec *fwspec = arg;
 	struct irq_fwspec gic_fwspec = *fwspec;
+
+	if (!arg) {
+		pr_info("%s invalid args", __func__);
+		return -EINVAL;
+	}
 
 	if (fwspec->param_count != 3)
 		return -EINVAL;
