@@ -663,6 +663,7 @@ void get_msdc_aee_buffer(unsigned long *vaddr, unsigned long *size)
 	mmc_cmd_dump(&buff, &free_size, NULL, host->mmc, dbg_max_cnt);
 	mmc_low_io_dump(&buff, &free_size, NULL, host->mmc);
 	/* retrun start location */
+	WARN_ON(vaddr == NULL);
 	*vaddr = (unsigned long)msdc_aee_buffer;
 	*size = MSDC_AEE_BUFFER_SIZE - free_size;
 }
