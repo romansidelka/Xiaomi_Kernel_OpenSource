@@ -2850,7 +2850,10 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 		dev_err(dsi->dev, "config dsi fail: %d", ret);
 		return;
 	}
-
+#ifdef CONFIG_DRM_PANEL_IT6113
+	// 6113 need hs clk before used it
+	mtk_dsi_clk_hs_mode(dsi, 1);
+#endif
 	if (dsi->panel) {
 		if ((!dsi->doze_enabled || force_lcm_update)
 			&& drm_panel_prepare(dsi->panel)) {
@@ -2912,7 +2915,9 @@ static void mtk_output_dsi_enable(struct mtk_dsi *dsi,
 #endif
 
 	mtk_dsi_set_mode(dsi);
+#ifndef CONFIG_DRM_PANEL_IT6113
 	mtk_dsi_clk_hs_mode(dsi, 1);
+#endif
 	if (dsi->slave_dsi) {
 		if (mtk_dsi_is_cmd_mode(&dsi->slave_dsi->ddp_comp))
 			writel(0x0001023c,
@@ -6277,6 +6282,7 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 	bool *enable;
 	unsigned int vfp_low_power = 0;
 	unsigned int vfp_lp_dyn = 0;
+	u8 buff[10] = {0};
 
 	switch (cmd) {
 	case REQ_PANEL_EXT:
@@ -6291,7 +6297,13 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 		mtk_dsi_stop_vdo_mode(dsi, handle);
 		break;
 	case ESD_CHECK_READ:
-		mtk_dsi_esd_read(comp, handle, (uintptr_t)params);
+		panel_ext = mtk_dsi_get_panel_ext(comp);
+
+		if (panel_ext && panel_ext->funcs
+			&& panel_ext->funcs->read_panel)
+			panel_ext->funcs->read_panel(dsi->panel, buff);
+		else
+			mtk_dsi_esd_read(comp, handle, (uintptr_t)params);
 		break;
 	case ESD_CHECK_CMP:
 		return mtk_dsi_esd_cmp(comp, handle, params);
@@ -6518,6 +6530,11 @@ static int mtk_dsi_io_cmd(struct mtk_ddp_comp *comp, struct cmdq_pkt *handle,
 
 		panel_ext = mtk_dsi_get_panel_ext(comp);
 		if (panel_ext && panel_ext->funcs
+			&& panel_ext->funcs->set_backlight_bridge)
+			panel_ext->funcs->set_backlight_bridge(dsi->panel,
+					mipi_dsi_dcs_write_gce,
+					handle, *(int *)params);
+		else if (panel_ext && panel_ext->funcs
 			&& panel_ext->funcs->set_backlight_cmdq)
 			panel_ext->funcs->set_backlight_cmdq(dsi,
 					mipi_dsi_dcs_write_gce,

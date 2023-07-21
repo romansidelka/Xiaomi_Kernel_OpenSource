@@ -61,6 +61,37 @@ config DRM_PANEL_RAYDIUM_RM692H0
 	  The panel has a 2560(RGB)×1536 (WQXGA) resolution and uses
 	  24 bit per pixel.
 
+config DRM_PANEL_IT6113
+	tristate "it6113 panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+	  Say Y here if you want to enable support for it6113
+	  bridge modules. The bridge has a one dsi in and two dsi out.
+	  It provides a MIPI DSI interface to the host
+	  and connect it to panel
+
+config DRM_PANEL_NT36532_DSI_VDO_BOE
+        tristate "nt36532 dphy vdo panel"
+        depends on OF
+        depends on DRM_MIPI_DSI
+        depends on BACKLIGHT_CLASS_DEVICE
+        help
+          Say Y here if you want to enable support for nt36532
+          fhdplus vdo panel. The panel has a 2944x1840 resolution
+          and uses 24-bits RGB per pixel. It provides a MIPI DSI
+          interface to host.
+
+config BACKLIGHT_KTZ8866
+       tristate "Backlight driver for KTZ8866"
+       depends on I2C && PWM
+       help
+         This supports KTZ8866 backlight driver.
+         it support ktz8866
+         it support ktz8866
+         it support ktz8866
+
 config DRM_PANEL_SAMSUNG_LD9040
 	tristate "Samsung LD9040 RGB/SPI panel"
 	depends on OF && SPI
