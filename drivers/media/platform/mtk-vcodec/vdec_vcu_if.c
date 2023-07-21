@@ -211,13 +211,14 @@ int vcu_dec_ipi_handler(void *data, unsigned int len, void *priv)
 
 	vcu_get_file_lock();
 	vcu_get_task(&task, &f, 0);
-	vcu_put_file_lock();
 	if (msg == NULL || task == NULL ||
 	   task->tgid != current->tgid ||
 	   (struct vdec_vcu_inst *)msg->ap_inst_addr == 0) {
+		vcu_put_file_lock();
 		ret = -EINVAL;
 		return ret;
 	}
+	vcu_put_file_lock();
 	msg_ctx_id = (int)msg->ap_inst_addr;
 
 	/* Check IPI inst is valid */
@@ -434,15 +435,16 @@ static int vcodec_vcu_send_msg(struct vdec_vcu_inst *vcu, void *msg, int len)
 
 	vcu_get_file_lock();
 	vcu_get_task(&task, &f, 0);
-	vcu_put_file_lock();
 	if (task == NULL ||
 		vcu->daemon_pid != task->tgid) {
 		if (task)
 			mtk_vcodec_err(vcu, "send fail pid: inst %d curr %d",
 				vcu->daemon_pid, task->tgid);
+		vcu_put_file_lock();
 		vcu->abort = 1;
 		return -EIO;
 	}
+	vcu_put_file_lock();
 
 	vcu->failure = 0;
 	vcu->signaled = 0;
@@ -482,11 +484,11 @@ void vcu_dec_set_pid(struct vdec_vcu_inst *vcu)
 
 	vcu_get_file_lock();
 	vcu_get_task(&task, &f, 0);
-	vcu_put_file_lock();
 	if (task != NULL)
 		vcu->daemon_pid = task->tgid;
 	else
 		vcu->daemon_pid = -1;
+	vcu_put_file_lock();
 }
 
 int vcu_dec_set_ctx(struct vdec_vcu_inst *vcu,
