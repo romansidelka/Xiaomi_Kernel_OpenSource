@@ -10,3 +10,7 @@ obj-y		+= gpio/
 #obj-y		+= mt6306/
 obj-y		+= mclk/
 obj-y		+= imgsensor_cfg_table.o
+
+ifeq ($(CONFIG_ARCH_MTK_PROJECT), "k69v1_64_g85_basic_ref")
+ccflags-y += -DG88_PROJECT
+endif
