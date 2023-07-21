@@ -543,7 +543,7 @@ void mt_usb_connect_v1(void)
 {
 	pr_info("%s in mtk extcon\n", __func__);
 
-#ifdef CONFIG_TCPC_CLASS
+#if (defined CONFIG_TCPC_CLASS) || (defined CONFIG_CHRDET_VBUS_DETECTION)
 	/* check current role to avoid power role swap issue */
 	if (g_extcon && g_extcon->c_role == DUAL_PROP_DR_NONE)
 		issue_connection_work(DUAL_PROP_DR_DEVICE);
@@ -565,6 +565,10 @@ void mt_usb_disconnect_v1(void)
 EXPORT_SYMBOL_GPL(mt_usb_disconnect_v1);
 #endif //ADAPT_PSY_V1
 
+#ifdef CONFIG_CHRDET_VBUS_DETECTION
+	extern bool mtk_mt_pmic_get_vcdt(void);
+#endif
+
 static int mtk_usb_extcon_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -572,6 +576,9 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	struct platform_device *conn_pdev;
 	struct device_node *conn_np;
 	int ret;
+#ifdef CONFIG_CHRDET_VBUS_DETECTION
+	bool is_vcdt_on;
+#endif
 
 	extcon = devm_kzalloc(&pdev->dev, sizeof(*extcon), GFP_KERNEL);
 	if (!extcon)
@@ -647,8 +654,16 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	extcon->c_role = DUAL_PROP_DR_DEVICE;
 
 	/* default initial role */
+#ifdef CONFIG_CHRDET_VBUS_DETECTION
+	is_vcdt_on = mtk_mt_pmic_get_vcdt();
+	dev_info(dev, "extcon vcdt %d\n", is_vcdt_on);
+	if (is_vcdt_on)
+		mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_DEVICE);
+	else
+		mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_NONE);
+#else
 	mtk_usb_extcon_set_role(extcon, DUAL_PROP_DR_NONE);
-
+#endif
 	/* default turn off vbus */
 	mtk_usb_extcon_set_vbus(extcon, false);
 
