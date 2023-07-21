@@ -276,7 +276,7 @@ static inline PVRSRV_ERROR _ValidateParams(IMG_UINT32 ui32NumPhysChunks,
 		return PVRSRV_ERROR_INVALID_PARAMS;
 	}
 
-	/* Range check of the alloc size PMRs can be a max of 1GB*/
+	/* Range check of the alloc size */
 	if (!PMRValidateSize(uiSize))
 	{
 		PVR_DPF((PVR_DBG_ERROR,
