@@ -163,7 +163,7 @@
 			bias-pull-down = <MTK_PUPD_SET_R1R0_10>;
 		};
 
-		pins_insert {
+		sdcard_pins_insert: pins_insert {
 			pinmux = <PINMUX_GPIO18__FUNC_GPIO18>;
 			bias-pull-up;
 		};
