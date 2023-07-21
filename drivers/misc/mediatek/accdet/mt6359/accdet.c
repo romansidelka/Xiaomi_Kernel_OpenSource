@@ -112,7 +112,10 @@ static struct cdev *accdet_cdev;
 static struct class *accdet_class;
 static struct device *accdet_device;
 static int s_button_status;
+
+#if defined(CONFIG_MACH_MT6785)
 static struct iio_channel *accdet_auxadc_iio;
+#endif
 
 /* accdet input device to report cable type and key event */
 static struct input_dev *accdet_input_dev;
@@ -880,6 +883,7 @@ static bool accdet_timeout_ns(u64 start_time_ns, u64 timeout_time_ns)
 }
 #endif /* end of #if PMIC_ACCDET_KERNEL */
 
+#if defined(CONFIG_MACH_MT6785)
 static u32 accdet_get_auxadc(int deCount)
 {
 	int value = 0, ret = 0;
@@ -895,6 +899,27 @@ static u32 accdet_get_auxadc(int deCount)
 
 	return value;
 }
+#else //defined(CONFIG_MACH_MT6785)
+static u32 accdet_get_auxadc(int deCount)
+{
+#if defined CONFIG_MTK_PMIC_NEW_ARCH | defined PMIC_ACCDET_CTP
+	int vol = pmic_get_auxadc_value(AUXADC_LIST_ACCDET);
+
+	pr_info("%s() vol_val:%d offset:%d real vol:%d mv!\n", __func__, vol,
+		accdet_auxadc_offset,
+		(vol < accdet_auxadc_offset) ? 0 : (vol-accdet_auxadc_offset));
+
+	if (vol < accdet_auxadc_offset)
+		vol = 0;
+	else
+		vol -= accdet_auxadc_offset;
+
+	return vol;
+#else
+	return 0;
+#endif
+}
+#endif //defined(CONFIG_MACH_MT6785)
 
 static void accdet_get_efuse(void)
 {
@@ -3278,6 +3303,7 @@ int mt_accdet_probe(struct platform_device *dev)
 
 	pr_info("%s() begin!\n", __func__);
 
+#if defined(CONFIG_MACH_MT6785)
 	/* get pmic accdet auxadc iio channel handler */
 	accdet_auxadc_iio = devm_iio_channel_get(&dev->dev, "pmic_accdet");
 	ret = PTR_ERR_OR_ZERO(accdet_auxadc_iio);
@@ -3286,7 +3312,7 @@ int mt_accdet_probe(struct platform_device *dev)
 			pr_notice("%s(), Error: Get iio ch failed (%d)\n", __func__, ret);
 		return -EPROBE_DEFER;
 	}
-
+#endif
 	/* register char device number, Create normal device for auido use */
 	ret = alloc_chrdev_region(&accdet_devno, 0, 1, ACCDET_DEVNAME);
 	if (ret) {
