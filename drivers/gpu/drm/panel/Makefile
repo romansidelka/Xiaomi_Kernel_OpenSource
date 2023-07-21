@@ -72,4 +72,5 @@ obj-$(CONFIG_DRM_PANEL_RAYDIUM_RM692H0) += panel-raydium-rm692h0-cmd-120hz.o
 obj-$(CONFIG_DRM_PANEL_IT6113) += ite6113.o
 obj-$(CONFIG_DRM_PANEL_NT36532_DSI_VDO_BOE) += panel-nt36532-dsi-vdo-boe.o
 obj-$(CONFIG_BACKLIGHT_KTZ8866) += ktz8866.o
+obj-$(CONFIG_DRM_PANEL_NT36532_DSI_VDO_BOE_6382) += panel-nt36532-dsi-vdo-boe-6382.o
 

@@ -249,6 +249,7 @@ struct mtk_panel_params {
 	unsigned int physical_width_um;
 	unsigned int physical_height_um;
 	unsigned int lane_swap_en;
+	unsigned int bdg_lane_swap_en;
 	unsigned int is_cphy;
 	enum MIPITX_PHY_LANE_SWAP
 		lane_swap[MIPITX_PHY_PORT_NUM][MIPITX_PHY_LANE_NUM];

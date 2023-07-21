@@ -1097,10 +1097,10 @@ static int mtk_dsi_poweron(struct mtk_dsi *dsi)
 	if (dsi->ext) {
 		if (dsi->ext->params->is_cphy)
 			mtk_mipi_tx_cphy_lane_config(dsi->phy, dsi->ext,
-						     !!dsi->slave_dsi);
+						     !dsi->is_slave);
 		else
 			mtk_mipi_tx_dphy_lane_config(dsi->phy, dsi->ext,
-						     !!dsi->slave_dsi);
+						     !dsi->is_slave);
 	} else{
 		DDPPR_ERR("%s dsi->ext is NULL\n", __func__);
 		goto err_refcount;

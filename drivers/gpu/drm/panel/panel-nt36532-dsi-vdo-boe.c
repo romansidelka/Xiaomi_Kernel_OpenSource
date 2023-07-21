@@ -817,7 +817,7 @@ static int lcm_probe(struct mipi_dsi_device *dsi)
 
 	ret = lcm_regulator_enable(ctx->it6113_v1_8, 1800000);
 	mdelay(5);
-	ret != lcm_regulator_enable(ctx->lcm_v1_8, 1800000);
+	ret |= lcm_regulator_enable(ctx->lcm_v1_8, 1800000);
 	if (ret < 0) {
 		dev_info(dev, "lcm power enable fail\n");
 		return ret;
