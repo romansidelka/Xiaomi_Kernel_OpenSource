@@ -12,6 +12,9 @@
 #include <linux/namei.h>
 
 #include "../internal.h"
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+#include <trace/events/mtk_fuse.h>
+#endif
 
 #define FUSE_BPF_IOCB_MASK (IOCB_APPEND | IOCB_DSYNC | IOCB_HIPRI | IOCB_NOWAIT | IOCB_SYNC)
 
@@ -208,6 +211,9 @@ int fuse_create_open_backing(
 		struct file *file, unsigned int flags, umode_t mode)
 {
 	struct fuse_inode *dir_fuse_inode = get_fuse_inode(dir);
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	struct fuse_dentry *fuse_entry = get_fuse_dentry(entry);
+#endif
 	struct fuse_dentry *dir_fuse_dentry = get_fuse_dentry(entry->d_parent);
 	struct dentry *backing_dentry = NULL;
 	struct inode *inode = NULL;
@@ -239,29 +245,54 @@ int fuse_create_open_backing(
 	if (err)
 		goto out;
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	if (fuse_entry->backing_path.dentry)
+		path_put(&fuse_entry->backing_path);
+	fuse_entry->backing_path = (struct path) {
+#else
 	if (get_fuse_dentry(entry)->backing_path.dentry)
 		path_put(&get_fuse_dentry(entry)->backing_path);
 	get_fuse_dentry(entry)->backing_path = (struct path) {
+#endif
 		.mnt = dir_fuse_dentry->backing_path.mnt,
 		.dentry = backing_dentry,
 	};
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	path_get(&fuse_entry->backing_path);
+#else
 	path_get(&get_fuse_dentry(entry)->backing_path);
+#endif
 
 	if (d_inode)
 		target_nodeid = get_fuse_inode(d_inode)->nodeid;
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	trace_mtk_fuse_iget_backing(__func__, __LINE__, d_inode, target_nodeid,
+			fuse_entry->backing_path.dentry->d_inode);
+#endif
 	inode = fuse_iget_backing(dir->i_sb, target_nodeid,
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+			fuse_entry->backing_path.dentry->d_inode);
+	if (!inode) {
+		err = -EIO;
+#else
 			get_fuse_dentry(entry)->backing_path.dentry->d_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
+#endif
 		goto out;
 	}
 
 	if (get_fuse_inode(inode)->bpf)
 		bpf_prog_put(get_fuse_inode(inode)->bpf);
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	get_fuse_inode(inode)->bpf = fuse_entry->bpf;
+	fuse_entry->bpf = NULL;
+#else
 	get_fuse_inode(inode)->bpf = dir_fuse_inode->bpf;
 	if (get_fuse_inode(inode)->bpf)
 		bpf_prog_inc(dir_fuse_inode->bpf);
+#endif
 
 	newent = d_splice_alias(inode, entry);
 	if (IS_ERR(newent)) {
@@ -269,10 +300,16 @@ int fuse_create_open_backing(
 		goto out;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	inode = NULL;
+#endif
 	entry = newent ? newent : entry;
 	err = finish_open(file, entry, fuse_open_file_backing);
 
 out:
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	iput(inode);
+#endif
 	dput(backing_dentry);
 	return err;
 }
@@ -966,6 +1003,35 @@ void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 	return ERR_PTR(fwio->ret);
 }
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags)
+{
+	struct fuse_file *ff = file->private_data;
+	long ret;
+
+	if (flags & FUSE_IOCTL_COMPAT)
+		ret = -ENOTTY;
+	else
+		ret = vfs_ioctl(ff->backing_file, command, arg);
+
+	return ret;
+}
+
+int fuse_file_flock_backing(struct file *file, int cmd, struct file_lock *fl)
+{
+	struct fuse_file *ff = file->private_data;
+	struct file *backing_file = ff->backing_file;
+	int error;
+
+	fl->fl_file = backing_file;
+	if (backing_file->f_op->flock)
+		error = backing_file->f_op->flock(backing_file, cmd, fl);
+	else
+		error = locks_lock_file_wait(backing_file, fl);
+	return error;
+}
+#endif
+
 ssize_t fuse_backing_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	int ret;
@@ -1211,29 +1277,77 @@ int fuse_handle_bpf_prog(struct fuse_entry_bpf *feb, struct inode *parent,
 struct dentry *fuse_lookup_finalize(struct fuse_bpf_args *fa, struct inode *dir,
 			   struct dentry *entry, unsigned int flags)
 {
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	struct fuse_dentry *fuse_entry;
+	struct dentry *backing_entry;
+	struct inode *inode = NULL, *backing_inode;
+	struct inode *entry_inode = entry->d_inode;
+#else
 	struct fuse_dentry *fd;
 	struct dentry *bd;
 	struct inode *inode, *backing_inode;
 	struct inode *d_inode = entry->d_inode;
+#endif
 	struct fuse_entry_out *feo = fa->out_args[0].value;
 	struct fuse_entry_bpf_out *febo = fa->out_args[1].value;
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	struct fuse_entry_bpf *feb = container_of(febo, struct fuse_entry_bpf,
+						  out);
+
+#else
 	struct fuse_entry_bpf *feb = container_of(febo, struct fuse_entry_bpf, out);
+#endif
 	int error = -1;
 	u64 target_nodeid = 0;
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	struct dentry *ret = NULL;
+#else
 	struct dentry *ret;
+#endif
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	fuse_entry = get_fuse_dentry(entry);
+	if (!fuse_entry) {
+#else
 	fd = get_fuse_dentry(entry);
 	if (!fd) {
+#endif
 		ret = ERR_PTR(-EIO);
 		goto out;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	backing_entry = fuse_entry->backing_path.dentry;
+	if (!backing_entry) {
+#else
 	bd = fd->backing_path.dentry;
 	if (!bd) {
+#endif
 		ret = ERR_PTR(-ENOENT);
 		goto out;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	if (entry_inode)
+		target_nodeid = get_fuse_inode(entry_inode)->nodeid;
+
+	backing_inode = backing_entry->d_inode;
+	if (backing_inode)
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	{
+		trace_mtk_fuse_iget_backing(__func__, __LINE__, entry_inode,
+				target_nodeid, backing_inode);
+#endif
+		inode = fuse_iget_backing(dir->i_sb, target_nodeid,
+					  backing_inode);
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	}
+#endif
+
+	error = inode ?
+		fuse_handle_bpf_prog(feb, dir, &get_fuse_inode(inode)->bpf) :
+		fuse_handle_bpf_prog(feb, dir, &fuse_entry->bpf);
+#else
 	backing_inode = bd->d_inode;
 	if (!backing_inode) {
 		ret = 0;
@@ -1257,15 +1371,36 @@ struct dentry *fuse_lookup_finalize(struct fuse_bpf_args *fa, struct inode *dir,
 	}
 
 	error = fuse_handle_backing(feb, &get_fuse_inode(inode)->backing_inode, &fd->backing_path);
+#endif
 	if (error) {
 		ret = ERR_PTR(error);
 		goto out;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	if (inode) {
+		error = fuse_handle_backing(feb,
+					&get_fuse_inode(inode)->backing_inode,
+					&fuse_entry->backing_path);
+		if (error) {
+			ret = ERR_PTR(error);
+			goto out;
+		}
+
+		get_fuse_inode(inode)->nodeid = feo->nodeid;
+		ret = d_splice_alias(inode, entry);
+		if (!IS_ERR(ret))
+			inode = NULL;
+	}
+#else
 	get_fuse_inode(inode)->nodeid = feo->nodeid;
 
 	ret = d_splice_alias(inode, entry);
+#endif
 out:
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
+	iput(inode);
+#endif
 	if (feb->backing_file)
 		fput(feb->backing_file);
 	return ret;
@@ -1371,6 +1506,10 @@ int fuse_mknod_backing(
 		 */
 		goto out;
 	}
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	trace_mtk_fuse_iget_backing(__func__, __LINE__, &fuse_inode->inode,
+			fuse_inode->nodeid, backing_inode);
+#endif
 	inode = fuse_iget_backing(dir->i_sb, fuse_inode->nodeid, backing_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -1449,6 +1588,10 @@ int fuse_mkdir_backing(
 		dput(backing_path.dentry);
 		backing_path.dentry = d;
 	}
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	trace_mtk_fuse_iget_backing(__func__, __LINE__, &fuse_inode->inode,
+			fuse_inode->nodeid, backing_inode);
+#endif
 	inode = fuse_iget_backing(dir->i_sb, fuse_inode->nodeid, backing_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
@@ -1805,6 +1948,10 @@ int fuse_link_backing(struct fuse_bpf_args *fa, struct dentry *entry,
 		goto out;
 	}
 
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	trace_mtk_fuse_iget_backing(__func__, __LINE__, &fuse_dir_inode->inode,
+			fuse_dir_inode->nodeid, backing_dir_inode);
+#endif
 	fuse_new_inode = fuse_iget_backing(dir->i_sb, fuse_dir_inode->nodeid, backing_dir_inode);
 	if (IS_ERR(fuse_new_inode)) {
 		err = PTR_ERR(fuse_new_inode);
@@ -2195,6 +2342,10 @@ int fuse_symlink_backing(
 		 */
 		goto out;
 	}
+#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
+	trace_mtk_fuse_iget_backing(__func__, __LINE__, &fuse_inode->inode,
+			fuse_inode->nodeid, backing_inode);
+#endif
 	inode = fuse_iget_backing(dir->i_sb, fuse_inode->nodeid, backing_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
