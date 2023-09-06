@@ -11,10 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 #include <sys/file.h>
-#endif
 #include <sys/inotify.h>
 #include <sys/mman.h>
 #include <sys/mount.h>
@@ -1339,7 +1336,6 @@ out:
 	return result;
 }
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 static int flock_test(const char *mount_dir)
 {
 	const char *file = "file";
@@ -1348,6 +1344,7 @@ static int flock_test(const char *mount_dir)
 	int fuse_dev = -1;
 	int fd = -1, fd2 = -1;
 	int backing_fd = -1;
+	char *addr = NULL;
 
 	TEST(src_fd = open(ft_src, O_DIRECTORY | O_RDONLY | O_CLOEXEC),
 	     src_fd != -1);
@@ -1382,7 +1379,6 @@ out:
 	close(src_fd);
 	return result;
 }
-#endif
 
 static int readdir_perms_test(const char *mount_dir)
 {
@@ -2179,10 +2175,7 @@ int main(int argc, char *argv[])
 		MAKE_TEST(bpf_test_no_readdirplus_without_nodeid),
 		MAKE_TEST(bpf_test_revalidate_handle_backing_fd),
 		MAKE_TEST(bpf_test_lookup_postfilter),
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 		MAKE_TEST(flock_test),
-		MAKE_TEST(bpf_test_create_and_remove_bpf),
-#endif
 	};
 #undef MAKE_TEST
 

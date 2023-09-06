@@ -1003,20 +1003,6 @@ void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 	return ERR_PTR(fwio->ret);
 }
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
-long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags)
-{
-	struct fuse_file *ff = file->private_data;
-	long ret;
-
-	if (flags & FUSE_IOCTL_COMPAT)
-		ret = -ENOTTY;
-	else
-		ret = vfs_ioctl(ff->backing_file, command, arg);
-
-	return ret;
-}
-
 int fuse_file_flock_backing(struct file *file, int cmd, struct file_lock *fl)
 {
 	struct fuse_file *ff = file->private_data;
@@ -1030,7 +1016,6 @@ int fuse_file_flock_backing(struct file *file, int cmd, struct file_lock *fl)
 		error = locks_lock_file_wait(backing_file, fl);
 	return error;
 }
-#endif
 
 ssize_t fuse_backing_mmap(struct file *file, struct vm_area_struct *vma)
 {
