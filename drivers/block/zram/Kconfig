@@ -88,3 +88,10 @@ config MIUI_ZRAM_MEMORY_TRACKING
 	  /sys/block/zramX/.
 
 	  See Documentation/blockdev/zram.txt for more information.
+
+config MI_MEMORY_FREEZE
+	bool "Control zRam writeback"
+	depends on ZRAM
+	help
+	  With this feature, admin can control the witeback of zram.
+

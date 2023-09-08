@@ -50,6 +50,9 @@ enum zram_pageflags {
 	ZRAM_HUGE,	/* Incompressible page */
 	ZRAM_COMPRESS_LOW, /*lower than aim compaction ratio */
 	ZRAM_IDLE,	/* not accessed page since last idle marking */
+#if defined(CONFIG_ZRAM_WRITEBACK) && defined(CONFIG_MI_MEMORY_FREEZE)
+	ZRAM_WRITEBACK_ENABLE, /* the MemoryFreeze cgroup page can wrieback */
+#endif
 
 	__NR_ZRAM_PAGEFLAGS,
 };
@@ -62,6 +65,17 @@ enum zram_pageflags {
 #define ZRAM_WB_IDLE_MAX (10U)
 
 #define ZRAM_WB_IDLE_DEFAULT ZRAM_WB_IDLE_MIN
+
+#ifdef CONFIG_ZRAM_WRITEBACK
+#define MAX_WRITEBACK_ORDER		5
+#define MAX_WRITEBACK_SIZE		(1 << MAX_WRITEBACK_ORDER)
+
+struct writeback_batch_pages
+{
+	struct page *page;
+	int index;
+};
+#endif
 
 /*-- Data structures */
 
@@ -146,6 +160,8 @@ struct zram {
 	struct block_device *bdev;
 	unsigned long *bitmap;
 	unsigned long nr_pages;
+	/* for batch writeback */
+	struct page *writeback_pages;
 #endif
 #ifdef CONFIG_ZRAM_MEMORY_TRACKING
 	struct dentry *debugfs_dir;
