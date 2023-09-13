@@ -1344,7 +1344,6 @@ static int flock_test(const char *mount_dir)
 	int fuse_dev = -1;
 	int fd = -1, fd2 = -1;
 	int backing_fd = -1;
-	char *addr = NULL;
 
 	TEST(src_fd = open(ft_src, O_DIRECTORY | O_RDONLY | O_CLOEXEC),
 	     src_fd != -1);
@@ -2009,7 +2008,6 @@ static int bpf_test_lookup_postfilter(const char *mount_dir)
 	return result;
 }
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 /**
  * Test that a file made via create_and_open correctly gets the bpf assigned
  * from the negative lookup
@@ -2047,7 +2045,6 @@ out:
 	umount(mount_dir);
 	return result;
 }
-#endif
 
 static void parse_range(const char *ranges, bool *run_test, size_t tests)
 {
@@ -2176,6 +2173,7 @@ int main(int argc, char *argv[])
 		MAKE_TEST(bpf_test_revalidate_handle_backing_fd),
 		MAKE_TEST(bpf_test_lookup_postfilter),
 		MAKE_TEST(flock_test),
+		MAKE_TEST(bpf_test_create_and_remove_bpf),
 	};
 #undef MAKE_TEST
 

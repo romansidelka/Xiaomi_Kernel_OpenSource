@@ -506,7 +506,6 @@ int lookuppostfilter_test(struct fuse_bpf_args *fa)
 	}
 }
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 SEC("test_create_remove")
 int createremovebpf_test(struct fuse_bpf_args *fa)
 {
@@ -532,4 +531,3 @@ int createremovebpf_test(struct fuse_bpf_args *fa)
 }
 
 
-#endif
