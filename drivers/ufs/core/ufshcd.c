@@ -9198,6 +9198,10 @@ static int ufshcd_setup_clocks(struct ufs_hba *hba, bool on)
 		}
 	}
 
+#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG_BUILD)
+	pr_info("%s: ufs clock %s\n", __func__, on ? "on" : "off");
+#endif
+
 	ret = ufshcd_vops_setup_clocks(hba, on, POST_CHANGE);
 	if (ret)
 		return ret;
@@ -9208,6 +9212,9 @@ out:
 			if (!IS_ERR_OR_NULL(clki->clk) && clki->enabled)
 				clk_disable_unprepare(clki->clk);
 		}
+#if IS_ENABLED(CONFIG_MTK_UFS_DEBUG_BUILD)
+		pr_info("%s: ufs clock off\n", __func__);
+#endif
 	} else if (!ret && on) {
 		spin_lock_irqsave(hba->host->host_lock, flags);
 		hba->clk_gating.state = CLKS_ON;
