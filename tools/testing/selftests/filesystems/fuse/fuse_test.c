@@ -11,6 +11,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+
 #include <sys/file.h>
 #include <sys/inotify.h>
 #include <sys/mman.h>
@@ -2205,8 +2206,10 @@ int main(int argc, char *argv[])
 		MAKE_TEST(bpf_test_revalidate_handle_backing_fd),
 		MAKE_TEST(bpf_test_lookup_postfilter),
 		MAKE_TEST(flock_test),
+#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 		MAKE_TEST(bpf_test_create_and_remove_bpf),
 		MAKE_TEST(bpf_test_mkdir_and_remove_bpf),
+#endif
 	};
 #undef MAKE_TEST
 

@@ -2703,6 +2703,7 @@ static int fuse_file_flock(struct file *file, int cmd, struct file_lock *fl)
 	if (ff->backing_file)
 		return fuse_file_flock_backing(file, cmd, fl);
 #endif
+
 	if (fc->no_flock) {
 		err = locks_lock_file_wait(file, fl);
 	} else {

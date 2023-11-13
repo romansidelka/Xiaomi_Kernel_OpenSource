@@ -355,6 +355,11 @@ static void print_unreferenced(struct seq_file *seq,
 	int i;
 	unsigned int msecs_age = jiffies_to_msecs(jiffies - object->jiffies);
 
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+	if (kmemleak_error)
+		return;
+#endif
+
 	warn_or_seq_printf(seq, "unreferenced object 0x%08lx (size %zu):\n",
 		   object->pointer, object->size);
 	warn_or_seq_printf(seq, "  comm \"%s\", pid %d, jiffies %lu (age %d.%03ds)\n",
@@ -464,9 +469,16 @@ static struct kmemleak_object *mem_pool_alloc(gfp_t gfp)
 		list_del(&object->object_list);
 	else if (mem_pool_free_count)
 		object = &mem_pool[--mem_pool_free_count];
+#if !IS_ENABLED(CONFIG_MTK_VM_DEBUG)
 	else
 		pr_warn_once("Memory pool empty, consider increasing CONFIG_DEBUG_KMEMLEAK_MEM_POOL_SIZE\n");
+#endif
 	raw_spin_unlock_irqrestore(&kmemleak_lock, flags);
+
+#if IS_ENABLED(CONFIG_MTK_VM_DEBUG)
+	if (!object)
+		pr_warn_once("Memory pool empty, consider increasing CONFIG_DEBUG_KMEMLEAK_MEM_POOL_SIZE\n");
+#endif
 
 	return object;
 }
