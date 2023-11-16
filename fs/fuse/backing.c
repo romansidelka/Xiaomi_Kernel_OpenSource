@@ -975,7 +975,6 @@ void *fuse_file_write_iter_finalize(struct fuse_bpf_args *fa,
 	return ERR_PTR(fwio->ret);
 }
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_UPSTREAM_BUILD)
 long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long arg, int flags)
 {
 	struct fuse_file *ff = file->private_data;
@@ -988,7 +987,6 @@ long fuse_backing_ioctl(struct file *file, unsigned int command, unsigned long a
 
 	return ret;
 }
-#endif
 
 int fuse_file_flock_backing(struct file *file, int cmd, struct file_lock *fl)
 {
@@ -1413,11 +1411,8 @@ int fuse_mknod_backing(
 #if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
 	trace_mtk_fuse_iget_backing(__func__, __LINE__, &fuse_inode->inode,
 			fuse_inode->nodeid, backing_inode);
-	inode = fuse_iget_backing(dir->i_sb, 0, backing_path.dentry->d_inode);
-#else
-	inode = fuse_iget_backing(dir->i_sb, fuse_inode->nodeid, backing_inode);
 #endif
-
+	inode = fuse_iget_backing(dir->i_sb, fuse_inode->nodeid, backing_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out;
@@ -1497,14 +1492,8 @@ int fuse_mkdir_backing(
 		dput(backing_path.dentry);
 		backing_path.dentry = d;
 	}
-
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-	trace_mtk_fuse_iget_backing(__func__, __LINE__, &dir_fuse_inode->inode,
-				dir_fuse_inode->nodeid, backing_path.dentry->d_inode);
-	inode = fuse_iget_backing(dir_inode->i_sb, 0, backing_path.dentry->d_inode);
-#else
-	inode = fuse_iget_backing(dir_inode->i_sb, 0, backing_path.dentry->d_inode);
-#endif
+	inode = fuse_iget_backing(dir_inode->i_sb, 0,
+				  backing_path.dentry->d_inode);
 	if (IS_ERR(inode)) {
 		err = PTR_ERR(inode);
 		goto out;
