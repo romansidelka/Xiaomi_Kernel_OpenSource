@@ -24,10 +24,6 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-#include <trace/events/mtk_fuse.h>
-#endif
-
 static bool __read_mostly allow_sys_admin_access;
 module_param(allow_sys_admin_access, bool, 0644);
 MODULE_PARM_DESC(allow_sys_admin_access,
@@ -318,16 +314,9 @@ static int fuse_dentry_revalidate(struct dentry *entry, unsigned int flags)
 			    (bool) IS_AUTOMOUNT(inode) != (bool) (outarg.attr.flags & FUSE_ATTR_SUBMOUNT)) {
 				fuse_queue_forget(fm->fc, forget,
 						  outarg.nodeid, 1);
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-				trace_mtk_fuse_queue_forget(__func__, __LINE__, outarg.nodeid, 1);
-#endif
 				goto invalid;
 			}
 			spin_lock(&fi->lock);
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-			trace_mtk_fuse_nlookup(__func__, __LINE__, inode,
-					fi->nodeid, fi->nlookup, fi->nlookup + 1);
-#endif
 			fi->nlookup++;
 			spin_unlock(&fi->lock);
 		}
@@ -539,6 +528,7 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 		err = -ENOENT;
 		if (!entry)
 			goto out_put_forget;
+
 		err = -EINVAL;
 		backing_file = bpf_arg.backing_file;
 		if (!backing_file)
@@ -550,13 +540,10 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 		}
 
 		backing_inode = backing_file->f_inode;
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-		trace_mtk_fuse_iget_backing(__func__, __LINE__, NULL,
-				outarg->nodeid, backing_inode);
-#endif
 		*inode = fuse_iget_backing(sb, outarg->nodeid, backing_inode);
 		if (!*inode)
 			goto out_put_forget;
+
 		err = fuse_handle_backing(&bpf_arg,
 				&get_fuse_inode(*inode)->backing_inode,
 				&get_fuse_dentry(entry)->backing_path);
@@ -589,9 +576,6 @@ int fuse_lookup_name(struct super_block *sb, u64 nodeid, const struct qstr *name
 	err = -ENOMEM;
 	if (!*inode && outarg->nodeid) {
 		fuse_queue_forget(fm->fc, forget, outarg->nodeid, 1);
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-		trace_mtk_fuse_queue_forget(__func__, __LINE__, outarg->nodeid, 1);
-#endif
 		goto out;
 	}
 	err = 0;
@@ -831,9 +815,6 @@ static int fuse_create_open(struct inode *dir, struct dentry *entry,
 		flags &= ~(O_CREAT | O_EXCL | O_TRUNC);
 		fuse_sync_release(NULL, ff, flags);
 		fuse_queue_forget(fm->fc, forget, outentry.nodeid, 1);
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-		trace_mtk_fuse_queue_forget(__func__, __LINE__, outentry.nodeid, 1);
-#endif
 		err = -ENOMEM;
 		goto out_err;
 	}
@@ -968,9 +949,6 @@ static int create_new_entry(struct fuse_mount *fm, struct fuse_args *args,
 			  &outarg.attr, entry_attr_timeout(&outarg), 0);
 	if (!inode) {
 		fuse_queue_forget(fm->fc, forget, outarg.nodeid, 1);
-#if IS_ENABLED(CONFIG_MTK_FUSE_DEBUG)
-		trace_mtk_fuse_queue_forget(__func__, __LINE__, outarg.nodeid, 1);
-#endif
 		return -ENOMEM;
 	}
 	kfree(forget);
