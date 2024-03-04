@@ -50,6 +50,9 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
 
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/mm.h>
+
 /*
  * FIXME: remove all knowledge of the buffer layer from the core VM
  */
@@ -1930,6 +1933,9 @@ repeat:
 			return folio;
 		folio = NULL;
 	}
+
+	trace_android_vh_filemap_get_folio(mapping, index, fgp_flags,
+					gfp, folio);
 	if (!folio)
 		goto no_page;
 
@@ -2961,7 +2967,7 @@ static int lock_folio_maybe_drop_mmap(struct vm_fault *vmf, struct folio *folio,
 
 	/*
 	 * NOTE! This will make us return with VM_FAULT_RETRY, but with
-	 * the mmap_lock still held. That's how FAULT_FLAG_RETRY_NOWAIT
+	 * the fault lock still held. That's how FAULT_FLAG_RETRY_NOWAIT
 	 * is supposed to work. We have way too many special cases..
 	 */
 	if (vmf->flags & FAULT_FLAG_RETRY_NOWAIT)
@@ -2971,13 +2977,14 @@ static int lock_folio_maybe_drop_mmap(struct vm_fault *vmf, struct folio *folio,
 	if (vmf->flags & FAULT_FLAG_KILLABLE) {
 		if (__folio_lock_killable(folio)) {
 			/*
-			 * We didn't have the right flags to drop the mmap_lock,
-			 * but all fault_handlers only check for fatal signals
-			 * if we return VM_FAULT_RETRY, so we need to drop the
-			 * mmap_lock here and return 0 if we don't have a fpin.
+			 * We didn't have the right flags to drop the
+			 * fault lock, but all fault_handlers only check
+			 * for fatal signals if we return VM_FAULT_RETRY,
+			 * so we need to drop the fault lock here and
+			 * return 0 if we don't have a fpin.
 			 */
 			if (*fpin == NULL)
-				mmap_read_unlock(vmf->vma->vm_mm);
+				release_fault_lock(vmf);
 			return 0;
 		}
 	} else
@@ -3052,6 +3059,8 @@ static struct file *do_sync_mmap_readahead(struct vm_fault *vmf)
 	ra->start = max_t(long, 0, vmf->pgoff - ra->ra_pages / 2);
 	ra->size = ra->ra_pages;
 	ra->async_size = ra->ra_pages / 4;
+	trace_android_vh_tune_mmap_readaround(ra->ra_pages, vmf->pgoff,
+			&ra->start, &ra->size, &ra->async_size);
 	ractl._index = ra->start;
 	page_cache_ra_order(&ractl, ra, 0);
 	return fpin;
