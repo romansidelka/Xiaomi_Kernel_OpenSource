@@ -1386,9 +1386,11 @@ targets := vmlinux
 # make sure no implicit rule kicks in
 $(sort $(vmlinux-deps) $(subdir-modorder)): descend ;
 
+#filechk_kernel.release = \
+#	echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion \
+#		$(srctree) $(BRANCH) $(KMI_GENERATION))"
 filechk_kernel.release = \
-	echo "$(KERNELVERSION)$$($(CONFIG_SHELL) $(srctree)/scripts/setlocalversion \
-		$(srctree) $(BRANCH) $(KMI_GENERATION))"
+	echo "$(KERNELVERSION)"
 
 # Store (new) KERNELRELEASE string in include/config/kernel.release
 include/config/kernel.release: FORCE
@@ -2089,6 +2091,10 @@ existing-targets := $(wildcard $(sort $(targets)))
 endif # config-build
 endif # mixed-build
 endif # need-sub-make
+
+ifeq ($(FACTORY_BUILD),1)
+KBUILD_CFLAGS += -DFACTORY_BUILD
+endif
 
 PHONY += FORCE
 FORCE:

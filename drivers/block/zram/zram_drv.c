@@ -168,9 +168,9 @@ static inline bool valid_io_request(struct zram *zram,
 	/* unaligned request */
 	if (unlikely(start & (ZRAM_SECTOR_PER_LOGICAL_BLOCK - 1)))
 		return false;
+
 	if (unlikely(size & (ZRAM_LOGICAL_BLOCK_SIZE - 1)))
 		return false;
-
 	end = start + (size >> SECTOR_SHIFT);
 	bound = zram->disksize >> SECTOR_SHIFT;
 	/* out of range range */

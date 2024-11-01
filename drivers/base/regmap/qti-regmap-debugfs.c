@@ -411,7 +411,7 @@ static ssize_t regmap_data_read_file(struct file *file, char __user *user_buf,
 	return ret;
 }
 
-#ifdef CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE
+//#ifdef CONFIG_REGMAP_QTI_DEBUGFS_ALLOW_WRITE
 
 static ssize_t regmap_data_write_file(struct file *file,
 				     const char __user *user_buf,
@@ -436,7 +436,7 @@ static ssize_t regmap_data_write_file(struct file *file,
 		return -EINVAL;
 
 	/* Userspace has been fiddling around behind the kernel's back */
-	add_taint(TAINT_USER, LOCKDEP_STILL_OK);
+	//add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 
 	ret = regmap_write(debug_map->regmap, debug_map->dump_address, value);
 	if (ret < 0)
@@ -446,14 +446,14 @@ static ssize_t regmap_data_write_file(struct file *file,
 }
 
 #define QTI_DEBUGFS_FILE_MODE 0600
-
+/*
 #else
 
 #define regmap_data_write_file NULL
 #define QTI_DEBUGFS_FILE_MODE 0400
 
 #endif
-
+*/
 static const struct file_operations regmap_data_fops = {
 	.open = simple_open,
 	.read = regmap_data_read_file,
