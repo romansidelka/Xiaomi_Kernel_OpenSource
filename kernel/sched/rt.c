@@ -2382,6 +2382,7 @@ static void switched_to_rt(struct rq *rq, struct task_struct *p)
 		update_rt_rq_load_avg(rq_clock_pelt(rq), rq, 0);
 		return;
 	}
+
 	/*
 	 * If we are not running we may need to preempt the current
 	 * running task. If that current running task is also an RT task
