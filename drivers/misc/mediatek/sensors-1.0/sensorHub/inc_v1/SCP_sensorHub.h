@@ -348,6 +348,7 @@ struct SCP_SENSOR_HUB_SET_CONFIG_REQ {
 	uint32_t bufferSize;
 	uint64_t ap_timestamp;
 	uint64_t arch_counter;
+	uint64_t ap_ts_sec;
 	/* uint32_t    reserved[8]; */
 };
 

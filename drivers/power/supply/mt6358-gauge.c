@@ -1629,7 +1629,7 @@ static signed int fg_set_iavg_intr(struct mtk_gauge *gauge_dev, void *data)
 	gauge_dev->hw_status.iavg_lt = iavg_lt;
 
 	/* iavg_ht */
-	fg_iavg_reg_ht = iavg_ht * 1000 * 1000;
+	fg_iavg_reg_ht = iavg_ht * 1000 * 1000 * 100;
 	if (gauge_dev->hw_status.r_fg_value != DEFAULT_R_FG)
 		fg_iavg_reg_ht = fg_iavg_reg_ht *
 			gauge_dev->hw_status.r_fg_value;
@@ -1654,7 +1654,7 @@ static signed int fg_set_iavg_intr(struct mtk_gauge *gauge_dev, void *data)
 
 
 	/* iavg_lt */
-	fg_iavg_reg_lt = iavg_lt * 1000 * 1000;
+	fg_iavg_reg_lt = iavg_lt * 1000 * 1000 * 100;
 
 	if (gauge_dev->hw_status.r_fg_value != DEFAULT_R_FG)
 		fg_iavg_reg_lt = fg_iavg_reg_lt *

@@ -15,12 +15,15 @@
 #include <linux/soc/mediatek/mtk_sip_svc.h>
 #include <mt-plat/dvfsrc-exp.h>
 #include <mt-plat/mtk_blocktag.h>
+#include <linux/proc_fs.h>
 
 #if IS_ENABLED(CONFIG_MMC_MTK_SW_CQHCI)
 #include "mtk-mmc-swcqhci.h"
 #endif
 
 #define MSDC_GPIO_2 "msdc_gpio=2"
+
+int sdgpio_value = 0;
 
 static int msdc_execute_tuning(struct mmc_host *mmc, u32 opcode);
 static void msdc_request_done(struct msdc_host *host, struct mmc_request *mrq);
@@ -2452,6 +2455,7 @@ static int msdc_get_cd(struct mmc_host *mmc)
 		goto end;
 	} else if (!host->internal_cd) {
 		host->card_inserted = mmc_gpio_get_cd(mmc);
+		sdgpio_value = host->card_inserted;
 	} else {
 		val = readl(host->base + MSDC_PS) & MSDC_PS_CDSTS;
 		if (mmc->caps2 & MMC_CAP2_CD_ACTIVE_HIGH)
@@ -3280,7 +3284,37 @@ static void msdc_gpio_of_parse(struct msdc_host *host)
 		);
 }
 #endif
-
+//add for sdcard slot status start
+static int sim_card_status_show(struct seq_file *m, void *v)
+{
+	pr_debug("%s: sdgpio_value is %d\n", __func__, sdgpio_value);
+	seq_printf(m, "%d\n", sdgpio_value);
+	return 0;
+}
+static int sim_card_status_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sim_card_status_show, NULL);
+}
+static const struct proc_ops sim_card_status_ops = {
+	.proc_open		= sim_card_status_proc_open,
+	.proc_read		= seq_read,
+	.proc_lseek		= seq_lseek,
+	.proc_release	= single_release,
+};
+static int sim_card_tray_create_proc(void)
+{
+	struct proc_dir_entry *status_entry;
+	status_entry = proc_create("sd_tray_gpio_value", 0, NULL, &sim_card_status_ops);
+	if (!status_entry){
+		return -ENOMEM;
+	}
+	return 0;
+}
+static void sim_card_tray_remove_proc(void)
+{
+	remove_proc_entry("sd_tray_gpio_value", NULL);
+}
+//add for sdcard slot status end
 static int msdc_drv_probe(struct platform_device *pdev)
 {
 	struct mmc_host *mmc;
@@ -3535,6 +3569,13 @@ skip_hwcq:
 	if (ret)
 		goto end;
 
+	if(!(mmc->caps & MMC_CAP_NONREMOVABLE)){
+		if(sim_card_tray_create_proc()){
+			dev_err(&pdev->dev, "creat proc sim_card_status failed\n");
+		} else {
+			dev_dbg(&pdev->dev, "creat proc sim_card_status successed\n");
+		}
+	}
 #if IS_ENABLED(CONFIG_MMC_DEBUG)
 	ret = mmc_dbg_register(mmc);
 #endif
@@ -3578,7 +3619,8 @@ static int msdc_drv_remove(struct platform_device *pdev)
 
 	mmc = platform_get_drvdata(pdev);
 	host = mmc_priv(mmc);
-
+	if(!(mmc->caps & MMC_CAP_NONREMOVABLE))
+		sim_card_tray_remove_proc();
 	pm_runtime_get_sync(host->dev);
 
 	platform_set_drvdata(pdev, NULL);

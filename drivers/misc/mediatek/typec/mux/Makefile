@@ -2,6 +2,13 @@
 
 ccflags-y += -I$(srctree)/drivers/usb/typec
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
+ifneq ($(filter $(CONFIG_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
+endif
+
+ifneq ($(filter $(CONFIG_SOUTHCHIP_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/sc_tcpc/inc
+endif
 
 obj-$(CONFIG_MTK_USB_TYPEC_MUX) += mux_switch.o
 obj-$(CONFIG_TYPEC_MUX_FUSB304)	+= fusb304.o

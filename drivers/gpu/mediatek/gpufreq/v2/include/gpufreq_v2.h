@@ -239,6 +239,7 @@ extern unsigned int (*mtk_get_gpu_limiter_fp)(enum gpufreq_target target,
 	enum gpuppm_limit_type limit);
 extern unsigned int (*mtk_get_gpu_cur_freq_fp)(enum gpufreq_target target);
 extern int (*mtk_get_gpu_cur_oppidx_fp)(enum gpufreq_target target);
+extern void (*mtk_devfreq_set_cur_freq_fp)(unsigned long cur_freq);
 
 /**************************************************
  * External Function

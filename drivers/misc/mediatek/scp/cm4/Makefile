@@ -21,6 +21,8 @@ ccflags-y += -I$(srctree)/drivers/devfreq/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/spm/
 ccflags-y += -I$(srctree)/include/linux/mfd/mt6358/
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/sensors-1.0/situation
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/sensors-1.0/hwmon/include
 
 ccflags-$(CONFIG_MTK_PMIC_CHIP_MT6335)+= -I$(srctree)/drivers/misc/mediatek/pmic/include/mt6335
 ccflags-$(CONFIG_MTK_PMIC_CHIP_MT6353)+= -I$(srctree)/drivers/misc/mediatek/pmic/include/mt6353

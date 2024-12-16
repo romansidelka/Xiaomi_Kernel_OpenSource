@@ -2482,7 +2482,6 @@ static int aed_proc_done(void)
 	remove_proc_entry("aed", NULL);
 	return 0;
 }
-
 /******************************************************************************
  * Module related
  *****************************************************************************/
@@ -2567,7 +2566,6 @@ static int __init aed_init(void)
 		return err;
 	}
 	pr_notice("aee kernel api ready");
-
 	mtk_slog_init();
 
 	return err;

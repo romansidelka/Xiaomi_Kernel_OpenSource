@@ -62,5 +62,5 @@ extern uint32_t tzdriver_dynamical_debug_flag;
 #endif
 
 extern unsigned long teei_capi_ready;
-
+extern unsigned int teei_daemon_status;
 #endif

@@ -1785,6 +1785,15 @@ static int mtk_mipi_tx_pll_prepare_mt6768(struct clk_hw *hw)
 		return -EINVAL;
 	}
 
+	writel(0x444422aa, mipi_tx->regs + MIPITX_VOLTAGE_SEL);
+
+	/* change the mipi_volt */
+	if (mipi_volt) {
+		DDPMSG("%s+ mipi_volt change: %d\n", __func__, mipi_volt);
+		mtk_mipi_tx_update_bits(mipi_tx, MIPITX_VOLTAGE_SEL,
+			FLD_RG_DSI_HSTX_LDO_REF_SEL, mipi_volt<<6);
+	}
+
 	writel(0x0, mipi_tx->regs + MIPITX_PRESERVED);
 	writel(0x00FF12E0, mipi_tx->regs + MIPITX_PLL_CON4);
 	/* BG_LPF_EN / BG_CORE_EN */

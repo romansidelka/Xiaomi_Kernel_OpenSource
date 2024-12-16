@@ -543,6 +543,12 @@ config SND_SOC_AW883XX
 	help
 	  This option enables support for aw883xx series Smart PA.
 
+config SND_SOC_SIA8152X
+	tristate "SoC Audio for SIA8152S Smart K PA"
+	depends on I2C
+	help
+	  This option enables support for SIA8152S Smart K PA.
+
 config SND_SOC_BD28623
 	tristate "ROHM BD28623 CODEC"
 	help
@@ -1333,6 +1339,7 @@ config SND_SOC_STA529
 config SND_SOC_STAC9766
 	tristate
 	depends on SND_SOC_AC97_BUS
+	select REGMAP_AC97
 
 config SND_SOC_STI_SAS
 	tristate "codec Audio support for STI SAS codec"

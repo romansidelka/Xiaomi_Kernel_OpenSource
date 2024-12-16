@@ -30,7 +30,9 @@
 #include <linux/suspend.h>
 #include "mtk_battery.h"
 #include "mtk_battery_table.h"
+#include <linux/hardware_info.h>
 
+#include "../../power/supply/wt_chg/charger_class/charger_class.h"
 
 struct tag_bootmode {
 	u32 size;
@@ -38,6 +40,10 @@ struct tag_bootmode {
 	u32 bootmode;
 	u32 boottype;
 };
+
+static int battery_type_flag = 0;
+#define MAX_BAT_NUM   2
+static char* battery_name[MAX_BAT_NUM+1] = {"battery_SWD_6650mAh", "battery_NVT_6650mAh", "unknown_battery"};
 
 int __attribute__ ((weak))
 	mtk_battery_daemon_init(struct platform_device *pdev)
@@ -152,9 +158,39 @@ bool is_algo_active(struct mtk_battery *gm)
 	return gm->algo.active;
 }
 
+#define MAX_BAT_NUM   2
+struct bat_id_res_range {
+	int low;
+	int high;
+};
+struct bat_id_res_range bat_id_res_table[MAX_BAT_NUM] = {{285,380},{55,85}};
+
 int fgauge_get_profile_id(void)
 {
-	return 0;
+	int i;
+  	struct mtk_battery *gm;
+	gm = get_mtk_battery();
+
+	for(i = 0; i < MAX_BAT_NUM; i++){
+		if(gm->battery_id_res > bat_id_res_table[i].low && gm->battery_id_res < bat_id_res_table[i].high)
+			break;
+	}
+	switch(i){
+	case 0:
+		hardwareinfo_set_prop(HARDWARE_BATTERY_ID, "battery_SWD_6650mAh");
+		bm_err("[%s]switch to battery_id = %d\n", __func__, i);
+		break;
+	case 1:
+		hardwareinfo_set_prop(HARDWARE_BATTERY_ID, "battery_NVT_6650mAh");
+		bm_err("[%s]switch to battery_id = %d\n", __func__, i);
+		break;
+	default:
+		hardwareinfo_set_prop(HARDWARE_BATTERY_ID, "unknown_battery");
+		bm_err("[%s]switch to battery_id = %d\n", __func__, i);
+		i = 1;
+		break;
+	}
+	return i;
 }
 
 int wakeup_fg_algo_cmd(
@@ -242,6 +278,7 @@ bool is_kernel_power_off_charging(void)
 
 	return false;
 }
+EXPORT_SYMBOL(is_kernel_power_off_charging);
 
 /* ============================================================ */
 /* power supply: battery */
@@ -279,16 +316,21 @@ static enum power_supply_property battery_props[] = {
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN,
 	POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT,
+	POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX,
 };
 
+extern bool get_jeita_high_temp_state(void);
 static int battery_psy_get_property(struct power_supply *psy,
 	enum power_supply_property psp,
 	union power_supply_propval *val)
 {
 	int ret = 0;
 	int curr_now = 0, curr_avg = 0;
+  	int charge_full;
 	struct mtk_battery *gm;
 	struct battery_data *bs_data;
+	union power_supply_propval status;
 
 	gm = (struct mtk_battery *)power_supply_get_drvdata(psy);
 	bs_data = &gm->bs_data;
@@ -301,7 +343,16 @@ static int battery_psy_get_property(struct power_supply *psy,
 
 	switch (psp) {
 	case POWER_SUPPLY_PROP_STATUS:
-		val->intval = bs_data->bat_status;
+		ret = power_supply_get_property(bs_data->chg_psy,
+			POWER_SUPPLY_PROP_STATUS, &status);
+		if (status.intval == POWER_SUPPLY_STATUS_FULL && !get_jeita_high_temp_state()){
+			val->intval = POWER_SUPPLY_STATUS_FULL;
+		} else {
+			val->intval = bs_data->bat_status;
+		}
+		if (gm->input_suspend == true){
+			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
+		}
 		break;
 	case POWER_SUPPLY_PROP_HEALTH:
 		val->intval = bs_data->bat_health;
@@ -323,7 +374,7 @@ static int battery_psy_get_property(struct power_supply *psy,
 		val->intval = bs_data->bat_technology;
 		break;
 	case POWER_SUPPLY_PROP_CYCLE_COUNT:
-		val->intval = 1;
+		val->intval = gm->bat_cycle;
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY:
 		/* 1 = META_BOOT, 4 = FACTORY_BOOT 5=ADVMETA_BOOT */
@@ -338,6 +389,9 @@ static int battery_psy_get_property(struct power_supply *psy,
 			val->intval = gm->fixed_uisoc;
 		else
 			val->intval = bs_data->bat_capacity;
+
+		if (val->intval == 0)
+			val->intval = 1;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		ret = gauge_get_property(GAUGE_PROP_BATTERY_CURRENT,
@@ -364,9 +418,13 @@ static int battery_psy_get_property(struct power_supply *psy,
 		ret = 0;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL:
-		val->intval =
-			gm->fg_table_cust_data.fg_profile[
-				gm->battery_id].q_max * 1000;
+		charge_full = gm->algo_qmax * gm->aging_factor / 100;
+		bm_err(" algo qmax:%d, aging_factor:%d, charge_full:%d\n",
+					gm->algo_qmax, gm->aging_factor, charge_full);
+		if (charge_full > 6650000)
+			val->intval = 6650000;
+		else
+			val->intval = charge_full;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_COUNTER:
 		val->intval = gm->ui_soc *
@@ -433,45 +491,22 @@ static int battery_psy_get_property(struct power_supply *psy,
 		ret = 0;
 		break;
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
-		if (check_cap_level(bs_data->bat_capacity) ==
-			POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN)
-			val->intval = 0;
-		else {
-			int q_max_mah = 0;
-			int q_max_uah = 0;
-
-			q_max_mah =
-				gm->fg_table_cust_data.fg_profile[
-				gm->battery_id].q_max / 10;
-
-			q_max_uah = q_max_mah * 1000;
-			if (q_max_uah <= 100000) {
-				bm_debug("%s q_max_mah:%d q_max_uah:%d\n",
-					__func__, q_max_mah, q_max_uah);
-				q_max_uah = 100001;
-			}
-			val->intval = q_max_uah;
-		}
+		val->intval = 6650000;
 		break;
 	case POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE:
 		bs_data = &gm->bs_data;
 		if (IS_ERR_OR_NULL(bs_data->chg_psy)) {
-			bs_data->chg_psy = devm_power_supply_get_by_phandle(
-				&gm->gauge->pdev->dev, "charger");
+			bs_data->chg_psy = power_supply_get_by_name("usb");
 			bm_err("%s retry to get chg_psy\n", __func__);
 		}
-		if (IS_ERR_OR_NULL(bs_data->chg_psy)) {
-			bm_err("%s Couldn't get chg_psy\n", __func__);
-			ret = 4350;
-		} else {
-			ret = power_supply_get_property(bs_data->chg_psy,
-				POWER_SUPPLY_PROP_CONSTANT_CHARGE_VOLTAGE, val);
-			if (ret < 0)
-				bm_err("get CV property fail\n");
-		}
+            	val->intval = 4350;
 		break;
-
-
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+			val->intval = charger_manager_get_prop_system_temp_level();
+			break ;
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT_MAX:
+			val->intval = charger_manager_get_prop_system_temp_level_max();
+			break ;
 	default:
 		ret = -EINVAL;
 		break;
@@ -481,6 +516,34 @@ static int battery_psy_get_property(struct power_supply *psy,
 		__func__, psp, ret, val->intval);
 
 	return ret;
+}
+
+static int battery_set_prop(struct power_supply *psy,
+		enum power_supply_property psp,
+		const union power_supply_propval *val)
+{
+	int ret = 0;
+	switch (psp) {
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+			charger_manager_set_prop_system_temp_level(val->intval);
+			break;
+	default:
+			pr_err("set prop %d is not supported in battery\n",psy);
+			ret = -EINVAL;
+			break ;
+	}
+	return ret;
+}
+static int battery_prop_is_writeable(struct power_supply *psy,
+		enum power_supply_property psp)
+{
+	switch (psp){
+	case POWER_SUPPLY_PROP_CHARGE_CONTROL_LIMIT:
+			return 1;
+	default:
+			break;
+	}
+	return 0;
 }
 
 static int battery_psy_set_property(struct power_supply *psy,
@@ -536,9 +599,10 @@ static void mtk_battery_external_power_changed(struct power_supply *psy)
 	}
 
 	if (IS_ERR_OR_NULL(chg_psy)) {
-		chg_psy = devm_power_supply_get_by_phandle(&gm->gauge->pdev->dev,
-							   "charger");
 		bm_err("%s retry to get chg_psy\n", __func__);
+		chg_psy = power_supply_get_by_name("usb");
+		if (IS_ERR_OR_NULL(chg_psy)) 
+			bm_err("%s retry failed\n", __func__);
 		bs_data->chg_psy = chg_psy;
 	} else {
 		ret = power_supply_get_property(chg_psy,
@@ -590,7 +654,7 @@ static void mtk_battery_external_power_changed(struct power_supply *psy)
 
 		/* check charger type */
 		ret = power_supply_get_property(chg_psy,
-			POWER_SUPPLY_PROP_USB_TYPE, &prop_type);
+			POWER_SUPPLY_PROP_TYPE, &prop_type);
 
 		/* plug in out */
 		cur_chr_type = prop_type.intval;
@@ -632,6 +696,8 @@ void battery_service_data_init(struct mtk_battery *gm)
 	bs_data->psd.num_properties = ARRAY_SIZE(battery_props);
 	bs_data->psd.get_property = battery_psy_get_property;
 	bs_data->psd.set_property = battery_psy_set_property;
+	bs_data->psd.set_property = battery_set_prop,
+	bs_data->psd.property_is_writeable = battery_prop_is_writeable,
 	bs_data->psd.external_power_changed =
 		mtk_battery_external_power_changed;
 	bs_data->psy_cfg.drv_data = gm;
@@ -639,7 +705,7 @@ void battery_service_data_init(struct mtk_battery *gm)
 	bs_data->bat_status = POWER_SUPPLY_STATUS_DISCHARGING,
 	bs_data->bat_health = POWER_SUPPLY_HEALTH_GOOD,
 	bs_data->bat_present = 1,
-	bs_data->bat_technology = POWER_SUPPLY_TECHNOLOGY_LION,
+	bs_data->bat_technology = POWER_SUPPLY_TECHNOLOGY_LIPO,
 	bs_data->bat_capacity = -1,
 	bs_data->bat_batt_vol = 0,
 	bs_data->bat_batt_temp = 0,
@@ -1007,7 +1073,7 @@ void fg_custom_init_from_header(struct mtk_battery *gm)
 	fg_cust_data = &gm->fg_cust_data;
 	fg_table_cust_data = &gm->fg_table_cust_data;
 
-	fgauge_get_profile_id();
+	gm->battery_id = fgauge_get_profile_id();
 
 	fg_cust_data->versionID1 = FG_DAEMON_CMD_FROM_USER_NUMBER;
 	fg_cust_data->versionID2 = sizeof(gm->fg_cust_data);
@@ -2131,7 +2197,7 @@ void battery_update(struct mtk_battery *gm)
 	}
 
 	battery_update_psd(gm);
-	bat_data->bat_technology = POWER_SUPPLY_TECHNOLOGY_LION;
+	bat_data->bat_technology = POWER_SUPPLY_TECHNOLOGY_LIPO;
 	bat_data->bat_health = POWER_SUPPLY_HEALTH_GOOD;
 	bat_data->bat_present =
 		gauge_get_int_property(GAUGE_PROP_BATTERY_EXIST);
@@ -2496,6 +2562,155 @@ static int temp_th_set(struct mtk_battery *gm,
 
 	return 0;
 }
+extern void charger_set_chg_en(bool en);
+extern void charger_set_suspend_current(bool en);
+static int StopCharging_Test_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	return -1;
+}
+
+static int StopCharging_Test_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	charger_set_chg_en(false);
+	*val = 1;
+	bm_err("[%s] success!!!\n",__func__);
+	return 0;
+}
+
+static int StartCharging_Test_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	return -1;
+}
+
+static int StartCharging_Test_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	charger_set_chg_en(true);
+	*val = 1;
+	bm_err("[%s] success!!!\n",__func__);
+	return 0;
+}
+
+static int battery_type_get(struct mtk_battery *gm,
+       struct mtk_battery_sysfs_field_info *attr,
+       int *val)
+{
+       int i;
+       battery_type_flag = 1;
+       for(i = 0; i < MAX_BAT_NUM; i++){
+		if(gm->battery_id_res > bat_id_res_table[i].low && gm->battery_id_res < bat_id_res_table[i].high)
+			break;
+	}
+       *val = i;
+       return 0;
+}
+static int battery_type_set(struct mtk_battery *gm,
+       struct mtk_battery_sysfs_field_info *attr,
+       int val)
+{
+       return 0;
+}
+
+extern void manual_set_cc_toggle(bool en);
+extern void manual_get_cc_toggle(bool *cc_toggle);
+extern bool manual_get_cid_status(void);
+static int otg_ui_support_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	*val = 1;
+	bm_err("[%s] *val: %d\n", __func__, *val);
+	return 0;
+}
+
+static int cid_status_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	*val = manual_get_cid_status();
+	bm_err("[%s] *val: %d\n", __func__, *val);
+	return 0;
+}
+
+static int cc_toggle_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	manual_get_cc_toggle(&gm->control_cc_toggle);
+	*val = !!gm->control_cc_toggle;
+	bm_err("[%s] *val: %d\n", __func__, *val);
+	return 0;
+}
+
+static int cc_toggle_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	gm->control_cc_toggle = val;
+	manual_set_cc_toggle(!!val);
+	bm_err("[%s] *val: %d\n", __func__, gm->control_cc_toggle);
+	return 0;
+}
+
+
+static int input_suspend_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	gm->input_suspend = val;
+	if (gm->input_suspend) {
+		charger_set_suspend_current(true);
+		charger_set_chg_en(false);
+	} else {
+		charger_set_suspend_current(false);
+		charger_set_chg_en(true);
+	}
+	bm_err("gm->input_suspend = %d\n", gm->input_suspend);
+	return 0;
+}
+
+static int input_suspend_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	*val = gm->input_suspend;
+  	return 0;
+}
+
+extern void charger_manager_set_shipmode(bool en);
+static int shipmode_count_reset_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	gm->shippingmode = val;
+	charger_manager_set_shipmode(gm->shippingmode);
+	pr_info("shippingmode = %d\n", gm->shippingmode);
+	return 0;
+}
+
+static int shipmode_count_reset_get(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int *val)
+{
+	*val = gm->shippingmode;
+	bm_err("[%s] success!!!\n",__func__);
+	return 0;
+}
+
+static int fake_cycle_count_set(struct mtk_battery *gm,
+	struct mtk_battery_sysfs_field_info *attr,
+	int val)
+{
+	gm->bat_cycle = val;
+	return 0;
+}
 
 static ssize_t bat_sysfs_store(struct device *dev,
 		struct device_attribute *attr, const char *buf, size_t count)
@@ -2538,6 +2753,12 @@ static ssize_t bat_sysfs_show(struct device *dev,
 	if (battery_attr->get != NULL)
 		battery_attr->get(gm, battery_attr, &val);
 
+       if (battery_type_flag == 1) {
+               count = sprintf(buf, "%s\n", battery_name[val]);
+               battery_type_flag = 0;
+               return count;
+       }
+
 	count = scnprintf(buf, PAGE_SIZE, "%d\n", val);
 	return count;
 }
@@ -2556,6 +2777,15 @@ static struct mtk_battery_sysfs_field_info battery_sysfs_field_tbl[] = {
 	BAT_SYSFS_FIELD_WO(reset, BAT_PROP_FG_RESET),
 	BAT_SYSFS_FIELD_RW(log_level, BAT_PROP_LOG_LEVEL),
 	BAT_SYSFS_FIELD_WO(temp_th, BAT_PROP_TEMP_TH_GAP),
+	BAT_SYSFS_FIELD_RW(StopCharging_Test, BAT_PROP_STOPCHARGING_TEST),
+	BAT_SYSFS_FIELD_RW(StartCharging_Test, BAT_PROP_STARTCHARGING_TEST),
+	BAT_SYSFS_FIELD_RW(input_suspend, BAT_PROP_INPUT_SUSEPEND),
+	BAT_SYSFS_FIELD_RW(shipmode_count_reset, BAT_PROP_SHIPMODE_COUNT_RESET),
+	BAT_SYSFS_FIELD_WO(fake_cycle_count, BAT_PROP_FAKE_CYCLE_COUNT),
+	BAT_SYSFS_FIELD_RW(battery_type, BAT_PROP_BATTERY_TYPE),
+	BAT_SYSFS_FIELD_RO(otg_ui_support, BAT_PROP_OTG_UI_SUPPORT),
+	BAT_SYSFS_FIELD_RO(cid_status, BAT_PROP_CID_STATUS),
+	BAT_SYSFS_FIELD_RW(cc_toggle, BAT_PROP_CC_TOGGLE),
 };
 
 int battery_get_property(enum battery_property bp,
@@ -3237,20 +3467,20 @@ static int shutdown_event_handler(struct mtk_battery *gm)
 				if (IS_ENABLED(
 					LOW_TEMP_DISABLE_LOW_BAT_SHUTDOWN)) {
 					if (tmp >= LOW_TEMP_THRESHOLD) {
-						down_to_low_bat = 1;
+//						down_to_low_bat = 1;
 						bm_debug("normal tmp, battery voltage is low shutdown\n");
 						wakeup_fg_algo(gm,
 							FG_INTR_SHUTDOWN);
 					} else if (sdd->avgvbat <=
 						LOW_TMP_BAT_VOLTAGE_LOW_BOUND) {
-						down_to_low_bat = 1;
+//						down_to_low_bat = 1;
 						bm_debug("cold tmp, battery voltage is low shutdown\n");
 						wakeup_fg_algo(gm,
 							FG_INTR_SHUTDOWN);
 					} else
 						bm_debug("low temp disable low battery sd\n");
 				} else {
-					down_to_low_bat = 1;
+//					down_to_low_bat = 1;
 					bm_debug("[%s]avg vbat is low to shutdown\n",
 						__func__);
 					wakeup_fg_algo(gm, FG_INTR_SHUTDOWN);
@@ -3359,7 +3589,10 @@ static int power_misc_routine_thread(void *arg)
 			sdd->overheat = false;
 			bm_err("%s battery overheat~ power off, ret = %d\n",
 				__func__, ret);
-			kernel_power_off();
+		/* 8 = KERNEL_POWER_OFF_CHARGING_BOOT */
+		/* 9 = LOW_POWER_OFF_CHARGING_BOOT */
+			if (gm->bootmode != 8 && gm->bootmode != 9)
+				kernel_power_off();
 			return 1;
 		}
 	}
@@ -3424,8 +3657,7 @@ int battery_psy_init(struct platform_device *pdev)
 	gm->gauge = gauge;
 	mutex_init(&gm->ops_lock);
 
-	gm->bs_data.chg_psy = devm_power_supply_get_by_phandle(&pdev->dev,
-							 "charger");
+	gm->bs_data.chg_psy = power_supply_get_by_name("usb");
 	if (IS_ERR_OR_NULL(gm->bs_data.chg_psy))
 		bm_err("[BAT_probe] %s: fail to get chg_psy !!\n", __func__);
 
@@ -3444,7 +3676,6 @@ int battery_psy_init(struct platform_device *pdev)
 		}
 		bm_err("[BAT_probe] power_supply_register Battery Success !!\n");
 	}
-
 	return 0;
 }
 
@@ -3523,7 +3754,7 @@ void fg_check_lk_swocv(struct device *dev,
 	bm_err("%s swocv_v:%d swocv_i:%d shutdown_time:%d\n",
 		__func__, gm->ptim_lk_v, gm->ptim_lk_i, gm->pl_shutdown_time);
 }
-
+extern int chg_batt_id_res;
 int battery_init(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -3538,6 +3769,9 @@ int battery_init(struct platform_device *pdev)
 	gm->log_level = BMLOG_ERROR_LEVEL;
 	gm->sw_iavg_gap = 3000;
 	gm->in_sleep = false;
+	gm->input_suspend = false;
+	gm->battery_id_res = chg_batt_id_res;
+	bm_err("[%s]batid_res = %d\n", __func__,gm->battery_id_res);
 	mutex_init(&gm->fg_update_lock);
 
 	init_waitqueue_head(&gm->wait_que);
@@ -3602,7 +3836,7 @@ int battery_init(struct platform_device *pdev)
 		battery_algo_init(gm);
 		bm_err("[%s]: enable Kernel mode Gauge\n", __func__);
 	}
-
+	hardwareinfo_set_prop(HARDWARE_BMS_GAUGE, "mt6358_gauge");
 	return 0;
 }
 

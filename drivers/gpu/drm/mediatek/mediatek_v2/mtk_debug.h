@@ -52,6 +52,8 @@ int mtk_drm_ioctl_pq_get_persist_property(struct drm_device *dev, void *data,
 	struct drm_file *file_priv);
 
 extern int mtk_disp_hrt_bw_dbg(void);
+int mtk_disp_set_cabc_mode(unsigned int mode);
+int mtk_disp_get_cabc_mode(unsigned int *mode);
 
 #ifdef _DRM_P_H_
 struct disp_rect {

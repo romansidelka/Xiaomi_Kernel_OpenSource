@@ -96,7 +96,7 @@ int lcd_bl_set_led_brightness(int value)//for set bringhtness
 	pr_debug("%s:hyper bl = %d\n", __func__, value);
 
 	if (value < 0) {
-		pr_debug("%d %s --wlc invalid value=%d\n", __LINE__, __func__, value);
+		pr_debug("%d %s invalid value=%d\n", __LINE__, __func__, value);
 		return 0;
 	}
 
@@ -117,7 +117,7 @@ EXPORT_SYMBOL(lcd_bl_set_led_brightness);
 
 int lcd_set_bias(int enable)
 {
-	pr_debug("--wlc, enter lcd_disable_bias function,value = %d", enable);
+	pr_debug("enter lcd_disable_bias function,value = %d", enable);
 	if (enable) {
 		lcd_bl_write_byte(0x09, 0x9C);/* enable OUTP */
 	    mdelay(5);
@@ -227,8 +227,7 @@ static int lcd_bl_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 
 	lcd_bl_i2c_client = client;
 
-	pr_debug("--wlc, i2c led\n");
-	pr_debug("--wlc, i2c address: %0x\n", client->addr);
+	pr_debug("i2c address: %0x\n", client->addr);
 
 	//write vsp/vsn reg
 	ret = lcd_bl_write_byte(0x0C, 0x30); /* LCD_BOOST_CFG */
@@ -246,10 +245,10 @@ static int lcd_bl_i2c_probe(struct i2c_client *client, const struct i2c_device_i
 	ret = lcd_bl_write_byte(0x08, 0x5F); /* BL enabled and Current sink 1/2/3/4 /5 enabled；*/
 
 	if (ret < 0) {
-		pr_debug("--wlc,[%s]:I2C write reg is fail!", __func__);
+		pr_debug("[%s]:I2C write reg is fail!", __func__);
 		return -EINVAL;
 	} else {
-		pr_debug("--wlc,[%s]:I2C write reg is success!", __func__);
+		pr_debug("[%s]:I2C write reg is success!", __func__);
 	}
 
     return 0;

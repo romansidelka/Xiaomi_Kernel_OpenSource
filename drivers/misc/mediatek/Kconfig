@@ -203,6 +203,8 @@ source "drivers/misc/mediatek/irtx/Kconfig"
 source "drivers/misc/mediatek/pwm/Kconfig"
 source "drivers/misc/mediatek/sensor/Kconfig"
 source "drivers/misc/mediatek/gate_ic/Kconfig"
+source "drivers/misc/mediatek/simtray/Kconfig"
+source "drivers/misc/mediatek/hall/Kconfig"
 endmenu # Other Peripheral
 
 menu "Performance"

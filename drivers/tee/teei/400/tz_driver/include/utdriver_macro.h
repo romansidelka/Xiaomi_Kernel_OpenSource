@@ -56,4 +56,6 @@
 
 /* #define DYNAMIC_SET_PRIORITY */
 
+#define DYNAMIC_SET_PRIORITY
+
 #endif /* end of UTDRIVER_MACRO_H */

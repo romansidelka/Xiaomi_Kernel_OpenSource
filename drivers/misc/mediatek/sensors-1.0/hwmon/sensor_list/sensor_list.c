@@ -13,6 +13,7 @@
 #include <linux/spinlock.h>
 #include <linux/uaccess.h>
 #include <linux/fs.h>
+#include <linux/hardware_info.h>
 
 #include "SCP_sensorHub.h"
 #include "sensor_list.h"
@@ -132,6 +133,10 @@ static void sensorlist_get_deviceinfo(struct work_struct *work)
 		strlcpy(sensorlist_info[handle].name,
 			devinfo.name,
 			sizeof(sensorlist_info[handle].name));
+		if(handle == accel){
+			hardwareinfo_set_prop(HARDWARE_ACCELEROMETER,sensorlist_info[handle].name);
+			pr_err("acc name %s\n", sensorlist_info[handle].name);
+		}
 		spin_unlock(&sensorlist_info_lock);
 	}
 }

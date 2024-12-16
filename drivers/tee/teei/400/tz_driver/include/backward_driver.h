@@ -36,4 +36,6 @@ int init_bdrv_comp_fn(void);
 void teei_notify_bdrv_fn(void);
 int teei_bdrv_fn(void *work);
 
+void teei_wait_for_bdrv_done(void);
+
 #endif /* end of BACKWARD_DRIVER_H */

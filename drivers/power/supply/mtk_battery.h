@@ -113,6 +113,15 @@ enum battery_property {
 	BAT_PROP_FG_RESET,
 	BAT_PROP_LOG_LEVEL,
 	BAT_PROP_TEMP_TH_GAP,
+	BAT_PROP_STOPCHARGING_TEST,
+	BAT_PROP_STARTCHARGING_TEST,
+	BAT_PROP_INPUT_SUSEPEND,
+	BAT_PROP_SHIPMODE_COUNT_RESET,
+	BAT_PROP_FAKE_CYCLE_COUNT,
+	BAT_PROP_BATTERY_TYPE,
+	BAT_PROP_OTG_UI_SUPPORT,
+	BAT_PROP_CID_STATUS,
+	BAT_PROP_CC_TOGGLE,
 };
 
 struct battery_data {
@@ -811,7 +820,7 @@ struct simulator_log {
 #define SHUTDOWN_TIME 40
 #define AVGVBAT_ARRAY_SIZE 30
 #define INIT_VOLTAGE 3450
-#define BATTERY_SHUTDOWN_TEMPERATURE 60
+#define BATTERY_SHUTDOWN_TEMPERATURE 58
 
 struct shutdown_condition {
 	bool is_overheat;
@@ -903,7 +912,8 @@ struct mtk_battery {
 	struct mtk_battery_algo algo;
 
 	u_int fgd_pid;
-
+	bool shippingmode;
+	bool control_cc_toggle;
 	/* adb */
 	int fixed_bat_tmp;
 	int fixed_uisoc;
@@ -1056,6 +1066,9 @@ struct mtk_battery {
 	struct fuel_gauge_custom_data fg_cust_data;
 	struct fuel_gauge_table_custom_data fg_table_cust_data;
 	struct fgd_cmd_param_t_custom fg_data;
+	int battery_id_res;
+	struct charger_dev *use_charge;
+	bool input_suspend;
 
 	/*daemon version control*/
 	struct VersionControl fg_version;
@@ -1149,5 +1162,9 @@ extern void do_fg_algo(struct mtk_battery *gm, unsigned int intr_num);
 extern void fg_bat_temp_int_internal(struct mtk_battery *gm);
 /* mtk_battery_algo.c end */
 extern void disable_all_irq(struct mtk_battery *gm);
+
+extern int charger_manager_get_prop_system_temp_level(void);
+extern int charger_manager_get_prop_system_temp_level_max(void);
+extern void charger_manager_set_prop_system_temp_level(int temp_level);
 
 #endif /* __MTK_BATTERY_INTF_H__ */

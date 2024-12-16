@@ -82,7 +82,8 @@
 #endif
 
 #include "mtk_disp_bdg.h"
-
+#include "linux/hardware_info.h"
+#include "mtk_debug.h"
 #define DRIVER_NAME "mediatek"
 #define DRIVER_DESC "Mediatek SoC DRM"
 #define DRIVER_DATE "20150513"
@@ -129,6 +130,7 @@ struct aod_scp_send_ipi_msg {
 
 static struct aod_scp_send_ipi_msg aod_scp_ipi;
 
+static char Lcm_name[HARDWARE_MAX_ITEM_LONGTH];
 void **mtk_aod_scp_ipi_init(void)
 {
 	return (void **)&aod_scp_ipi.send_ipi;
@@ -4861,6 +4863,7 @@ int _parse_tag_videolfb(unsigned int *vramsize, phys_addr_t *fb_base,
 			*vramsize = videolfb_tag->vram;
 			*fb_base = videolfb_tag->fb_base;
 			*fps = videolfb_tag->fps;
+			strncpy(Lcm_name,videolfb_tag->lcmname,strlen(videolfb_tag->lcmname)+1);
 			if (*fps == 0)
 				*fps = 6000;
 			goto found;
@@ -6471,6 +6474,61 @@ static bool init_secure_static_path_switch(struct device *dev, struct mtk_drm_pr
 	return false;
 }
 
+static ssize_t panel_info_show(struct device *device,
+			    struct device_attribute *attr,
+			   char *buf)
+{
+
+	int ret;
+	ret = snprintf(buf, strlen(Lcm_name)+1, "%s\n", Lcm_name);
+	return ret;
+}
+
+static ssize_t cabc_mode_store(struct device *device,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int ret = 0;
+	unsigned long cabc_mode;
+
+	ret = kstrtoul(buf, 10, &cabc_mode);
+	if (ret)
+		return ret;
+
+	cabc_mode = (unsigned int)cabc_mode;
+	ret = mtk_disp_set_cabc_mode(cabc_mode);
+
+	return ret ? ret : count;
+}
+
+static ssize_t cabc_mode_show(struct device *device,
+			   struct device_attribute *attr,
+			   char *buf)
+{
+	unsigned int cabc_mode = 0;
+
+	mtk_disp_get_cabc_mode(&cabc_mode);
+	pr_info("%s, current used cabc mode is %d.\n", __func__, cabc_mode);
+
+	if (cabc_mode < 0) {
+		return snprintf(buf, PAGE_SIZE, "invalid\n");
+	} else {
+		return snprintf(buf, PAGE_SIZE, "%d\n", cabc_mode);
+	}
+}
+
+static DEVICE_ATTR_RO(panel_info);
+static DEVICE_ATTR_RW(cabc_mode);
+
+static struct attribute *lcd_attrs[] = {
+	&dev_attr_panel_info.attr,
+	&dev_attr_cabc_mode.attr,
+	NULL
+};
+
+static const struct attribute_group lcd_attr_group = {
+	.attrs = lcd_attrs,
+};
+
 static int mtk_drm_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -6490,6 +6548,13 @@ static int mtk_drm_probe(struct platform_device *pdev)
 	disp_dbg_probe();
 	PanelMaster_probe();
 	DDPINFO("%s+\n", __func__);
+	pr_info("%s+\n", __func__);
+
+	ret = sysfs_create_group(&dev->kobj, &lcd_attr_group);
+	if (ret) {
+		pr_err("create lcd_attr_group failed.");
+		return ret;
+	}
 
 	//drm_debug = 0x1F; /* DRIVER messages */
 	private = devm_kzalloc(dev, sizeof(*private), GFP_KERNEL);

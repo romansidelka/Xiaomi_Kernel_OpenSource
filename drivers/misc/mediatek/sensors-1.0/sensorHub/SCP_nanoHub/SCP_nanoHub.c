@@ -59,7 +59,7 @@
 #error "SENSOR_DATA_SIZE > SENSOR_IPI_PACKET_SIZE, out of memory"
 #endif
 
-#define SYNC_TIME_CYCLC 10000
+#define SYNC_TIME_CYCLC 2000
 #define SYNC_TIME_START_CYCLC 3000
 #define SCP_sensorHub_DEV_NAME "SCP_sensorHub"
 
@@ -818,7 +818,7 @@ static void SCP_sensorHub_init_sensor_state(void)
 
 	mSensorState[SENSOR_TYPE_PICK_UP_GESTURE].sensorType =
 		SENSOR_TYPE_PICK_UP_GESTURE;
-	mSensorState[SENSOR_TYPE_PICK_UP_GESTURE].rate = SENSOR_RATE_ONESHOT;
+	mSensorState[SENSOR_TYPE_PICK_UP_GESTURE].rate = SENSOR_RATE_ONCHANGE;
 	mSensorState[SENSOR_TYPE_PICK_UP_GESTURE].timestamp_filter = false;
 
 	mSensorState[SENSOR_TYPE_WAKE_GESTURE].sensorType =
@@ -865,6 +865,14 @@ static void SCP_sensorHub_init_sensor_state(void)
 
 	mSensorState[SENSOR_TYPE_SAR].sensorType = SENSOR_TYPE_SAR;
 	mSensorState[SENSOR_TYPE_SAR].timestamp_filter = false;
+
+	mSensorState[SENSOR_TYPE_SAR_ALGO].sensorType = SENSOR_TYPE_SAR_ALGO;
+	mSensorState[SENSOR_TYPE_SAR_ALGO].rate = SENSOR_RATE_ONCHANGE;
+	mSensorState[SENSOR_TYPE_SAR_ALGO].timestamp_filter = false;
+
+	mSensorState[SENSOR_TYPE_SAR_ALGO_TOP].sensorType = SENSOR_TYPE_SAR_ALGO_TOP;
+	mSensorState[SENSOR_TYPE_SAR_ALGO_TOP].rate = SENSOR_RATE_ONCHANGE;
+	mSensorState[SENSOR_TYPE_SAR_ALGO_TOP].timestamp_filter = false;
 }
 
 static void init_sensor_config_cmd(struct ConfigCmd *cmd,
@@ -1211,16 +1219,19 @@ static int sensor_send_timestamp_wake_locked(void)
 	int len;
 	int err = 0;
 	uint64_t now_time, arch_counter;
+	struct timespec64 ts;
 
 	/* send_timestamp_to_hub is process context, disable irq is safe */
 	local_irq_disable();
 	now_time = ktime_get_boottime_ns();
 	arch_counter = __arch_counter_get_cntvct();
+	ktime_get_real_ts64(&ts);
 	local_irq_enable();
 	req.set_config_req.sensorType = 0;
 	req.set_config_req.action = SENSOR_HUB_SET_TIMESTAMP;
 	req.set_config_req.ap_timestamp = now_time;
 	req.set_config_req.arch_counter = arch_counter;
+	req.set_config_req.ap_ts_sec = ts.tv_sec;
 	pr_debug("sync ap boottime=%lld\n", now_time);
 	len = sizeof(req.set_config_req);
 	err = scp_sensorHub_req_send(&req, &len, 1);
@@ -1699,6 +1710,16 @@ int sensor_get_data_from_hub(uint8_t sensorType,
 		data->sar_event.data[1] = data_t->sar_event.data[1];
 		data->sar_event.data[2] = data_t->sar_event.data[2];
 		break;
+	case ID_SAR_ALGO:
+		data->time_stamp = data_t->time_stamp;
+		data->data[0] = data_t->data[0];
+		pr_err("HTP saralgo status %d \n",data->data[0]);
+		break;
+	case ID_SAR_ALGO_TOP:
+		data->time_stamp = data_t->time_stamp;
+		data->data[0] = data_t->data[0];
+		pr_err("HTP saralgo status %d \n",data->data[0]);
+		break;
 	default:
 		err = -1;
 		break;
@@ -2056,6 +2077,18 @@ int sensor_set_cmd_to_hub(uint8_t sensorType,
 				CUST_ACTION_GET_SENSOR_INFO;
 			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
 				custData) + sizeof(req.set_cust_req.getInfo);
+			break;
+		case CUST_ACTION_SET_TRACE:
+			req.set_cust_req.setTrace.action =
+				CUST_ACTION_SET_TRACE;
+			req.set_cust_req.setTrace.trace = *((int32_t *) data);
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.setTrace);
+			break;
+		case CUST_ACTION_SHOW_REG:
+			req.set_cust_req.showReg.action = CUST_ACTION_SHOW_REG;
+			len = offsetof(struct SCP_SENSOR_HUB_SET_CUST_REQ,
+				custData) + sizeof(req.set_cust_req.showReg);
 			break;
 		default:
 			return -1;

@@ -157,6 +157,8 @@ int polling_rdma_output_line_enable;
 static struct notifier_block nb;
 static unsigned long pm_penpd_status = GENPD_NOTIFY_OFF;
 
+static unsigned int esd_last_bl_for_restore;
+
 /* SW workaround.
  * Polling RDMA output line isn't 0 && RDMA status is run,
  * before switching mm clock mux in cmd mode.
@@ -488,6 +490,68 @@ int mtk_dprec_logger_get_buf(enum DPREC_LOGGER_PR_TYPE type, char *stringbuf,
 	return n;
 }
 
+extern int mtk_drm_crtc_set_cabc_mode(struct drm_crtc *crtc, unsigned int mode);
+int mtk_disp_set_cabc_mode(unsigned int mode)
+{
+	struct drm_crtc *crtc;
+	int ret = 0;
+
+	if (IS_ERR_OR_NULL(drm_dev)) {
+		DDPPR_ERR("%s, invalid drm dev\n", __func__);
+		return -EINVAL;
+	}
+
+	DDPINFO("%s-%d entern, cabc mode==%d\n", __func__, __LINE__, mode);
+
+	/* this debug cmd only for crtc0 */
+	crtc = list_first_entry(&(drm_dev)->mode_config.crtc_list,
+			typeof(*crtc), head);
+	if (IS_ERR_OR_NULL(crtc)) {
+		DDPPR_ERR("%s failed to find crtc\n", __func__);
+		return -EINVAL;
+	}
+
+	ret = mtk_drm_crtc_set_cabc_mode(crtc, mode);
+	DDPINFO("%s-%d exit, ret=%d\n", __func__, __LINE__, ret);
+
+	return ret;
+}
+
+int mtk_disp_get_cabc_mode(unsigned int *mode)
+{
+	struct drm_crtc *crtc;
+	struct mtk_ddp_comp *comp;
+	struct mtk_drm_crtc *mtk_crtc;
+
+	if (IS_ERR_OR_NULL(drm_dev)) {
+		DDPPR_ERR("%s, invalid drm dev\n", __func__);
+		return -EINVAL;
+	}
+
+	DDPINFO("%s-%d entern.\n", __func__, __LINE__);
+
+	/* this debug cmd only for crtc0 */
+	crtc = list_first_entry(&(drm_dev)->mode_config.crtc_list,
+			typeof(*crtc), head);
+	if (IS_ERR_OR_NULL(crtc)) {
+		DDPPR_ERR("%s failed to find crtc\n", __func__);
+		return -EINVAL;
+	}
+
+	mtk_crtc = to_mtk_crtc(crtc);
+	comp = mtk_ddp_comp_request_output(mtk_crtc);
+
+	if (!(comp && comp->funcs && comp->funcs->io_cmd)) {
+		DDPPR_ERR("cannot find output component\n");
+		return -EINVAL;
+	}
+
+	comp->funcs->io_cmd(comp, NULL, DSI_GET_CABC_MODE, mode);
+	DDPINFO("%s-%d exit, current cabc mode is %d\n", __func__, __LINE__, *mode);
+
+	return 0;
+}
+
 extern int mtk_drm_setbacklight(struct drm_crtc *crtc, unsigned int level);
 int mtkfb_set_backlight_level(unsigned int level)
 {
@@ -509,10 +573,19 @@ int mtkfb_set_backlight_level(unsigned int level)
 
 	ret = mtk_drm_setbacklight(crtc, level);
 	DDPINFO("%s-%d, ret=%d\n", __func__, __LINE__, ret);
+	esd_last_bl_for_restore = level;
 
 	return ret;
 }
 EXPORT_SYMBOL(mtkfb_set_backlight_level);
+
+int esd_restore_backlight(void)
+{
+	int ret = 0;
+	ret = mtkfb_set_backlight_level(esd_last_bl_for_restore);
+	DDPINFO("%s-, esd_last_bl_for_restore=%d\n", __func__,  esd_last_bl_for_restore);
+	return ret;
+}
 
 int mtk_drm_set_conn_backlight_level(unsigned int conn_id, unsigned int level)
 {

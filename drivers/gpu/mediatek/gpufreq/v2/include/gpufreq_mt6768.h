@@ -239,8 +239,8 @@ struct gpufreq_status {
 
 #define SIGNED_OPP_GPU_NUM              ARRAY_SIZE(g_default_gpu)
 struct gpufreq_opp_info g_default_gpu[] = {
-	GPUOP(1000000, 95000, 105000, POSDIV_POWER_2, 1875, 0), /*  0 sign off */
-	GPUOP(975000, 92500, 102500, POSDIV_POWER_2, 1875, 0), /*  1 */
+	/*GPUOP(1000000, 95000, 105000, POSDIV_POWER_2, 1875, 0),*/ /*  0 sign off */
+	/*GPUOP(975000, 92500, 102500, POSDIV_POWER_2, 1875, 0), *//*  1 */
 	GPUOP(950000, 90000, 100000, POSDIV_POWER_2, 1875, 0), /*  2 */
 	GPUOP(925000, 87500, 97500, POSDIV_POWER_2, 1875, 0), /*  3 */
 	GPUOP(900000, 85000, 95000, POSDIV_POWER_2, 1875, 0), /*  4 */
@@ -291,7 +291,8 @@ struct gpufreq_opp_info g_default_gpu[] = {
  **************************************************/
 unsigned int g_aging_table[][SIGNED_OPP_GPU_NUM] = {
 	{ /* aging table 0 */
-		1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, /* OPP 0~9   */
+		/*1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875,*/ /* OPP 0~9   */
+		1875, 1875, 1875, 1875, 1875, 1875, 1875, 1875,  /* OPP 0~9   */
 		1250, 1250, 1250, 1250, 1250, 1250, 1250, 625, 625, 625,    /* OPP 10~19 */
 		 625,  625,  625,  625,  625,  625,  625, 625, 625, 625,    /* OPP 20~29 */
 		 625,  625,                                                 /* OPP 30~31 */

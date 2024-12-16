@@ -480,6 +480,13 @@ enum mtk_lcm_version {
 	MTK_COMMON_LCM_DRV,
 };
 
+enum ddic_cabc_status {
+	DDIC_CABC_OFF = 0,
+	DDIC_CABC_UI_ON = 1,
+	DDIC_CABC_STILL_ON = 2,
+	DDIC_CABC_MOVIE_ON = 3,
+};
+
 struct mtk_panel_funcs {
 	int (*set_backlight_cmdq)(void *dsi_drv, dcs_write_gce cb,
 		void *handle, unsigned int level);
@@ -574,6 +581,11 @@ struct mtk_panel_funcs {
 
 	int (*send_ddic_cmd_pack)(struct drm_panel *panel,
 		void *dsi_drv, dcs_write_gce_pack cb, void *handle);
+
+	int (*set_cabc_mode)(struct drm_panel *panel, void *dsi_drv, dcs_write_gce cb,
+		void *handle, unsigned int mode);
+
+	int (*get_cabc_mode)(struct drm_panel *panel, unsigned int *mode);
 };
 
 void mtk_panel_init(struct mtk_panel_ctx *ctx);
@@ -591,5 +603,7 @@ int mtk_panel_tch_handle_reg(struct drm_panel *panel);
 void **mtk_panel_tch_handle_init(void);
 int mtk_panel_tch_rst(struct drm_panel *panel);
 enum mtk_lcm_version mtk_drm_get_lcm_version(void);
+int mtk_ddic_dsi_read_cmd(struct mtk_ddic_dsi_msg *cmd_msg);
+int mtk_ddic_dsi_send_cmd(struct mtk_ddic_dsi_msg *cmd_msg, bool blocking);
 
 #endif

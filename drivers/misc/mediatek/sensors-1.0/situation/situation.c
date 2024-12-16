@@ -6,6 +6,8 @@
 #define pr_fmt(fmt) "<SITUATION> " fmt
 
 #include "situation.h"
+#include "situation_hub/sar/sar_factory.h"
+#include <linux/vmalloc.h>
 
 static struct situation_context *situation_context_obj;
 
@@ -72,6 +74,12 @@ static int handle_to_index(int handle)
 	case ID_SAR:
 		index = sar;
 		break;
+	case ID_SAR_ALGO:
+		index = saralgo;
+		break;
+	case ID_SAR_ALGO_TOP:
+		index = saralgo_top;
+		break;
 	default:
 		index = -1;
 		pr_err("%s invalid handle:%d,index:%d\n", __func__,
@@ -113,7 +121,7 @@ int situation_data_report(int handle, uint32_t one_sample_data)
 {
 	return situation_data_report_t(handle, one_sample_data, 0);
 }
-int sar_data_report_t(int32_t value[3], int64_t time_stamp)
+int sar_data_report_t(int32_t value[8], int64_t time_stamp)
 {
 	int err = 0, index = -1;
 	struct sensor_event event;
@@ -132,13 +140,98 @@ int sar_data_report_t(int32_t value[3], int64_t time_stamp)
 	event.word[0] = value[0];
 	event.word[1] = value[1];
 	event.word[2] = value[2];
+	event.word[3] = value[3];
+	event.word[4] = value[4];
+	event.word[5] = value[5];
+	event.word[6] = value[6];
+	event.word[7] = value[7];
+	err = sensor_input_event(situation_context_obj->mdev.minor, &event);
+	if (cxt->ctl_context[index].situation_ctl.open_report_data != NULL &&
+		cxt->ctl_context[index].situation_ctl.is_support_wake_lock)
+		__pm_wakeup_event(cxt->ws[index], 250);
+	return err;
+
+}
+
+EXPORT_SYMBOL_GPL(sar_data_report_t);
+
+int sar_exception_data_report(void)
+{
+	int err = 0, index = -1;
+	struct sensor_event event;
+	struct situation_context *cxt = situation_context_obj;
+	memset(&event, 0, sizeof(struct sensor_event));
+	pr_info("sar_exception_data_report\n");
+	index = handle_to_index(ID_SAR);
+	if (index < 0) {
+		pr_err("[%s] invalid index\n", __func__);
+		return -1;
+	}
+	event.handle = ID_SAR;
+	event.flush_action = DATA_ACTION;
+	event.word[0] = (30000 << 16)|30000;         //top wifi diff|bottom main diff
+	event.word[1] = (10000 << 16)|10000;         //top wifi useful|bottom main useful
+	event.word[2] = (30001 << 16)|30001;         //top wifi average|bottom main average
+	event.word[3] = 0;
+	event.word[4] = 0;
+	event.word[5] = (3 << 8)|3;                  //top wifi state|bottom main state
+	event.word[6] = 0;
+	event.word[7] = 0;
 	err = sensor_input_event(situation_context_obj->mdev.minor, &event);
 	if (cxt->ctl_context[index].situation_ctl.open_report_data != NULL &&
 		cxt->ctl_context[index].situation_ctl.is_support_wake_lock)
 		__pm_wakeup_event(cxt->ws[index], 250);
 	return err;
 }
-int sar_data_report(int32_t value[3])
+EXPORT_SYMBOL_GPL(sar_exception_data_report);
+
+int sar_algo_exception_data_report(void)
+{
+	int err = 0, index = -1;
+	struct sensor_event event;
+	struct situation_context *cxt = situation_context_obj;
+	memset(&event, 0, sizeof(struct sensor_event));
+	pr_info("sar_algo_exception_data_report\n");
+	index = handle_to_index(ID_SAR_ALGO);
+	if (index < 0) {
+		pr_err("[%s] invalid index\n", __func__);
+		return -1;
+	}
+	event.handle = ID_SAR_ALGO;
+	event.flush_action = DATA_ACTION;
+	event.word[0] = 3;         //bottom state
+	err = sensor_input_event(situation_context_obj->mdev.minor, &event);
+	if (cxt->ctl_context[index].situation_ctl.open_report_data != NULL &&
+		cxt->ctl_context[index].situation_ctl.is_support_wake_lock)
+		__pm_wakeup_event(cxt->ws[index], 250);
+	return err;
+}
+EXPORT_SYMBOL_GPL(sar_algo_exception_data_report);
+
+int sar_algo_top_exception_data_report(void)
+{
+	int err = 0, index = -1;
+	struct sensor_event event;
+	struct situation_context *cxt = situation_context_obj;
+	memset(&event, 0, sizeof(struct sensor_event));
+	pr_info("sar_algo_top_exception_data_report\n");
+	index = handle_to_index(ID_SAR_ALGO_TOP);
+	if (index < 0) {
+		pr_err("[%s] invalid index\n", __func__);
+		return -1;
+	}
+	event.handle = ID_SAR_ALGO_TOP;
+	event.flush_action = DATA_ACTION;
+	event.word[0] = 3;         //top state
+	err = sensor_input_event(situation_context_obj->mdev.minor, &event);
+	if (cxt->ctl_context[index].situation_ctl.open_report_data != NULL &&
+		cxt->ctl_context[index].situation_ctl.is_support_wake_lock)
+		__pm_wakeup_event(cxt->ws[index], 250);
+	return err;
+}
+EXPORT_SYMBOL_GPL(sar_algo_top_exception_data_report);
+
+int sar_data_report(int32_t value[8])
 {
 	return sar_data_report_t(value, 0);
 }
@@ -152,6 +245,29 @@ int situation_notify(int handle)
 {
 	return situation_data_report_t(handle, 1, 0);
 }
+int sar_cali_report(int32_t value[3])
+{
+	struct sensor_event event;
+	int err = 0;
+	int index = -1;
+
+	memset(&event, 0, sizeof(struct sensor_event));
+
+	index = handle_to_index(ID_SAR);
+	if (index < 0) {
+		pr_err("[%s] invalid index\n", __func__);
+		return -1;
+	}
+	event.handle = ID_SAR;
+	event.flush_action = CALI_ACTION;
+	event.word[0] = value[0];
+	event.word[1] = value[1];
+	event.word[2] = value[2];
+	err = sensor_input_event(situation_context_obj->mdev.minor, &event);
+	pr_info("cali[0] = %d, cali[1] = %d, cali[2] = %d\n", event.word[0], event.word[1], event.word[2]);
+	return err;
+}
+EXPORT_SYMBOL_GPL(sar_cali_report);
 int situation_flush_report(int handle)
 {
 	struct sensor_event event;
@@ -309,7 +425,34 @@ static ssize_t situactive_show(struct device *dev,
 	}
 	return s_len;
 }
+static ssize_t sarstep_show(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+		return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+}
+static ssize_t sarstep_store(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct situation_context *cxt = NULL;
+	int err = 0;
+	uint8_t *handle_step = NULL;
+	handle_step = vzalloc(count);
+	if (!handle_step)
+		return -ENOMEM;
+	memcpy(handle_step, buf, count);
+	pr_err("sar step handle_step = %d", *handle_step);
 
+	mutex_lock(&situation_context_obj->situation_op_mutex);
+	cxt = situation_context_obj;
+	if (cxt->ctl_context[saralgo].situation_ctl.set_cali != NULL)
+		err = cxt->ctl_context[saralgo].situation_ctl.set_cali(handle_step, count);
+	else
+	    pr_err("DON'T SUPPORT SARALGO COMMONVERSION FLUSH\n");
+	if (err < 0)
+		pr_err("saralgo set step err %d\n", err);
+	mutex_unlock(&situation_context_obj->situation_op_mutex);
+	return count;
+}
 static ssize_t situbatch_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t count)
 {
@@ -357,7 +500,9 @@ static ssize_t situbatch_store(struct device *dev,
 	err = situation_enable_and_batch(index);
 #endif
 	pr_debug("%s done\n", __func__);
+#if IS_ENABLED(CONFIG_NANOHUB)
 err_out:
+#endif
 	mutex_unlock(&situation_context_obj->situation_op_mutex);
 	if (err)
 		return err;
@@ -416,6 +561,42 @@ static ssize_t situflush_show(struct device *dev,
 	return len;
 }
 
+static ssize_t situcali_show(struct device *dev,
+    struct device_attribute *attr,char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%d\n", 0);
+}
+
+static ssize_t situcali_store(struct device *dev, struct device_attribute *attr,
+	const char *buf, size_t count)
+{
+		struct situation_context *cxt = NULL;
+		int index = -1;
+		int err = 0;
+		uint8_t *cali_buf = NULL;
+
+		index = handle_to_index(ID_SAR);
+	    if (index < 0) {
+		    pr_err("[%s] invalid index\n", __func__);
+		   return -1;
+	    }
+		cali_buf = vzalloc(count);
+		if (cali_buf == NULL)
+			return -EFAULT;
+		memcpy(cali_buf, buf, count);
+
+		mutex_lock(&situation_context_obj->situation_op_mutex);
+		cxt = situation_context_obj;
+		if (cxt->ctl_context[index].situation_ctl.set_cali != NULL)
+			err = cxt->ctl_context[index].situation_ctl.set_cali(cali_buf, count);
+		else
+			pr_err("DON'T SUPPORT SITUATION COMMONVERSION FLUSH\n");
+		if (err < 0)
+			pr_err("situ set cali err %d\n", err);
+		mutex_unlock(&situation_context_obj->situation_op_mutex);
+		vfree(cali_buf);
+		return count;
+}
 static ssize_t situdevnum_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
@@ -516,12 +697,16 @@ DEVICE_ATTR_RW(situactive);
 DEVICE_ATTR_RW(situbatch);
 DEVICE_ATTR_RW(situflush);
 DEVICE_ATTR_RO(situdevnum);
+DEVICE_ATTR_RW(situcali);
+DEVICE_ATTR_RW(sarstep);
 
 static struct attribute *situation_attributes[] = {
 	&dev_attr_situactive.attr,
 	&dev_attr_situbatch.attr,
 	&dev_attr_situflush.attr,
+	&dev_attr_situcali.attr,
 	&dev_attr_situdevnum.attr,
+	&dev_attr_sarstep.attr,
 	NULL
 };
 
@@ -574,6 +759,7 @@ int situation_register_control_path(struct situation_control_path *ctl,
 		ctl->open_report_data;
 	cxt->ctl_context[index].situation_ctl.batch = ctl->batch;
 	cxt->ctl_context[index].situation_ctl.flush = ctl->flush;
+	cxt->ctl_context[index].situation_ctl.set_cali = ctl->set_cali;
 	cxt->ctl_context[index].situation_ctl.is_support_wake_lock =
 		ctl->is_support_wake_lock;
 	cxt->ctl_context[index].situation_ctl.is_support_batch =

@@ -20,6 +20,7 @@
 #include <dt-bindings/power/mt6768-power.h>
 #include <dt-bindings/interconnect/mtk,mt6873-emi.h>
 #include <dt-bindings/interconnect/mtk,mmqos.h>
+#include <dt-bindings/gpio/gpio.h>
 
 / {
 	model = "MT6768";
@@ -1083,7 +1084,7 @@ transparent_hugepage=never";
 
 	bp_thl: bp_thl {
 		compatible = "mediatek,mtk-bp-thl";
-		soc_limit = <15>;
+		soc_limit = <3>;
 		soc_limit_ext = <20>;
 		soc_limit_ext_release = <25>;
 	};
@@ -1519,7 +1520,7 @@ transparent_hugepage=never";
 		interrupts = <GIC_SPI 73 IRQ_TYPE_EDGE_RISING 0>;
 		mediatek,key-debounce-ms = <1024>;
 		mediatek,hw-map-num = <72>;
-		mediatek,hw-init-map = <114 0 0 0 0 0 0 0 0 0 0 0 0
+		mediatek,hw-init-map = <0 115 0 0 0 0 0 0 0 0 0 0 0
 					0 0 0 0 0 0 0 0 0 0 0 0 0 0
 					0 0 0 0 0 0 0 0 0 0 0 0 0 0
 					0 0 0 0 0 0 0 0 0 0 0 0 0 0
@@ -2513,12 +2514,17 @@ transparent_hugepage=never";
 	regulator_vibrator: regulator_vibrator {
 		compatible = "regulator-vibrator";
 		label = "vibrator";
-		min-volt = <2300000>;
+		min-volt = <3000000>;
 		max-volt = <3200000>;
 		min-limit = <15>;
 		max-limit = <15000>;
 		vib-supply = <&mt_pmic_vibr_ldo_reg>;
 	};
+//+ N85  p-yangjiawei1.wt 2024.02.21  add swtp proc start
+	swtp: swtp {
+		compatible = "mediatek, swtp-eint";
+	};
+//+ N85  p-yangjiawei1.wt 2024.02.21  add swtp proc end
 
 	md_ccif3@1023f000 {
 		compatible = "mediatek,md_ccif3";
@@ -3109,17 +3115,35 @@ transparent_hugepage=never";
 		nvmem-cell-names = "thermal-calibration-data";
 	};
 
-	tboard_thermistor1: thermal-sensor1 {
-		compatible = "mediatek,mtboard-thermistor1";
+	tboard_thermistor0: thermal-sensor0 {
+		compatible = "mediatek,mtboard-thermistor0";
 		io-channels = <&auxadc 0>;
 		io-channel-names = "thermistor-ch0";
 	};
 
-	tboard_thermistor2: thermal-sensor2 {
-		compatible = "mediatek,mtboard-thermistor2";
+	tboard_thermistor6: thermal-sensor6 {
+		compatible = "mediatek,mtboard-thermistor6";
 		io-channels = <&auxadc 1>;
-		io-channel-names = "thermistor-ch1";
+		io-channel-names = "thermistor-ch6";
 	};
+
+	tboard_thermistor5:thermal-sensor5 {
+		compatible = "mediatek,mtboard-thermistor5";
+		io-channels = <&auxadc 2>;
+		io-channel-names = "thermistor-ch2";
+	};
+
+	tboard_thermistor7: thermal-sensor7 {
+                 compatible = "mediatek,mtboard-thermistor7";
+                 io-channels = <&auxadc 4>;
+                 io-channel-names = "thermistor-ch7";
+        };
+
+	tboard_thermistor3: thermal-sensor3 {
+                 compatible = "mediatek,mtboard-thermistor3";
+                 io-channels = <&auxadc 3>;
+                 io-channel-names = "thermistor-ch3";
+        };
 
 	drcc: drcc {
 		compatible = "mediatek,drcc";
@@ -3348,9 +3372,13 @@ transparent_hugepage=never";
 			reg = <0 0x11cc0800 0 0x100>;
 			clocks = <&clk26m>;
 			clock-names = "ref";
-			mediatek,discth = <0x7>;
-			mediatek,eye-vrt = <0x5>;
-			mediatek,eye-term = <0x5>;
+			mediatek,discth = <0x9>;
+			mediatek,eye-vrt = <0x7>;
+			mediatek,eye-term = <0x6>;
+			mediatek,rev6 = <0x3>;
+			mediatek,eye-vrt-host = <0x7>;
+			mediatek,eye-term-host = <0x6>;
+			mediatek,rev6-host = <0x3>;
 			nvmem-cells = <&u2_phy_data>;
 			nvmem-cell-names = "intr_cal";
 			nvmem-cell-masks = <0x1f>;
@@ -3632,129 +3660,130 @@ transparent_hugepage=never";
 	gpu_mali_opp: opp-table0 {
 		compatible = "operating-points-v2";
 		opp00 {
-			opp-hz = /bits/ 64 <1000000000>;
+			opp-hz = /bits/ 64 <950000000>;
 			opp-microvolt = <95000>;
 		};
 		opp01 {
-			opp-hz = /bits/ 64 <975000000>;
+			opp-hz = /bits/ 64 <925000000>;
 			opp-microvolt = <92500>;
 		};
 		opp02 {
-			opp-hz = /bits/ 64 <950000000>;
+			opp-hz = /bits/ 64 <900000000>;
 			opp-microvolt = <90000>;
 		};
 		opp03 {
-			opp-hz = /bits/ 64 <925000000>;
+			opp-hz = /bits/ 64 <875000000>;
 			opp-microvolt = <87500>;
 		};
 		opp04 {
-			opp-hz = /bits/ 64 <900000000>;
+			opp-hz = /bits/ 64 <850000000>;
 			opp-microvolt = <85000>;
 		};
 		opp05 {
-			opp-hz = /bits/ 64 <875000000>;
+			opp-hz = /bits/ 64 <823000000>;
 			opp-microvolt = <82500>;
 		};
 		opp06 {
-			opp-hz = /bits/ 64 <850000000>;
+			opp-hz = /bits/ 64 <796000000>;
 			opp-microvolt = <80000>;
 		};
 		opp07 {
-			opp-hz = /bits/ 64 <823000000>;
+			opp-hz = /bits/ 64 <769000000>;
 			opp-microvolt = <79375>;
 		};
 		opp08 {
-			opp-hz = /bits/ 64 <796000000>;
+			opp-hz = /bits/ 64 <743000000>;
 			opp-microvolt = <78125>;
 		};
 		opp09 {
-			opp-hz = /bits/ 64 <769000000>;
+			opp-hz = /bits/ 64 <716000000>;
 			opp-microvolt = <76875>;
 		};
 		opp10 {
-			opp-hz = /bits/ 64 <743000000>;
+			opp-hz = /bits/ 64 <690000000>;
 			opp-microvolt = <75625>;
 		};
 		opp11 {
-			opp-hz = /bits/ 64 <716000000>;
+			opp-hz = /bits/ 64 <663000000>;
 			opp-microvolt = <75000>;
 		};
 		opp12 {
-			opp-hz = /bits/ 64 <690000000>;
+			opp-hz = /bits/ 64 <637000000>;
 			opp-microvolt = <73750>;
 		};
 		opp13 {
-			opp-hz = /bits/ 64 <663000000>;
+			opp-hz = /bits/ 64 <611000000>;
 			opp-microvolt = <72500>;
 		};
 		opp14 {
-			opp-hz = /bits/ 64 <637000000>;
+			opp-hz = /bits/ 64 <586000000>;
 			opp-microvolt = <71250>;
 		};
 		opp15 {
-			opp-hz = /bits/ 64 <611000000>;
+			opp-hz = /bits/ 64 <560000000>;
 			opp-microvolt = <70625>;
 		};
 		opp16 {
-			opp-hz = /bits/ 64 <586000000>;
+			opp-hz = /bits/ 64 <535000000>;
 			opp-microvolt = <70000>;
 		};
 		opp17 {
-			opp-hz = /bits/ 64 <560000000>;
+			opp-hz = /bits/ 64 <509000000>;
 			opp-microvolt = <69375>;
 		};
 		opp18 {
-			opp-hz = /bits/ 64 <535000000>;
+			opp-hz = /bits/ 64 <484000000>;
 			opp-microvolt = <68750>;
 		};
 		opp19 {
-			opp-hz = /bits/ 64 <509000000>;
+			opp-hz = /bits/ 64 <467000000>;
 			opp-microvolt = <68125>;
 		};
 		opp20 {
-			opp-hz = /bits/ 64 <484000000>;
+			opp-hz = /bits/ 64 <450000000>;
 			opp-microvolt = <66875>;
 		};
 		opp21 {
-			opp-hz = /bits/ 64 <467000000>;
+			opp-hz = /bits/ 64 <434000000>;
 			opp-microvolt = <66875>;
 		};
 		opp22 {
-			opp-hz = /bits/ 64 <450000000>;
+			opp-hz = /bits/ 64 <417000000>;
 			opp-microvolt = <66250>;
 		};
 		opp23 {
-			opp-hz = /bits/ 64 <434000000>;
+			opp-hz = /bits/ 64 <400000000>;
 			opp-microvolt = <65625>;
 		};
 		opp24 {
-			opp-hz = /bits/ 64 <417000000>;
+			opp-hz = /bits/ 64 <383000000>;
 			opp-microvolt = <65000>;
 		};
 		opp25 {
-			opp-hz = /bits/ 64 <400000000>;
+			opp-hz = /bits/ 64 <366000000>;
 			opp-microvolt = <64375>;
 		};
 		opp26 {
-			opp-hz = /bits/ 64 <383000000>;
+			opp-hz = /bits/ 64 <349000000>;
 			opp-microvolt = <64375>;
 		};
 		opp27 {
-			opp-hz = /bits/ 64 <366000000>;
+			opp-hz = /bits/ 64 <332000000>;
 			opp-microvolt = <63750>;
 		};
 		opp28 {
-			opp-hz = /bits/ 64 <349000000>;
+			opp-hz = /bits/ 64 <315000000>;
 			opp-microvolt = <63125>;
 		};
 		opp29 {
-			opp-hz = /bits/ 64 <332000000>;
+			opp-hz = /bits/ 64 <299000000>;
 			opp-microvolt = <62500>;
 		};
-		opp30 {
+		/*opp30 {
 			opp-hz = /bits/ 64 <315000000>;
 			opp-microvolt = <61875>;
-		};
+		
+		};*/
 	};
 
 	mmsys_config: mmsys_config@14000000 {
@@ -4677,6 +4706,16 @@ transparent_hugepage=never";
 		};
 	};
 
+	flashlights_mt6768: flashlights_mt6768 {
+		compatible = "mediatek,flashlights_mt6768";
+		decouple = <1>;
+		channel@1 {
+			type = <0>;
+			ct = <0>;
+			part = <0>;
+		};
+	};
+
 	camera_af_hw_node: camera_af_hw_node {
 		compatible = "mediatek,camera_af_lens";
 	};
@@ -4757,6 +4796,15 @@ transparent_hugepage=never";
 		/* reserved for overlay by odm */
 	};
 
+	simtray: simtray {
+		compatible = "simtray-status";
+		status-gpio = <&pio 18 0x0>;
+	};
+
+	hall_state: hall_state{
+		compatible = "hall-state";
+		status-gpio = <&pio 6 GPIO_ACTIVE_LOW>;
+	};
 	memory_ssmr_features: memory-ssmr-features {
 		compatible = "mediatek,memory-ssmr-features";
 		svp-region-based-size = <0 0x10000000>;
@@ -4798,15 +4846,16 @@ transparent_hugepage=never";
 
 		/* charging current */
 		usb_charger_current = <500000>;
-		ac_charger_current = <2050000>;
-		ac_charger_input_current = <3200000>;
-		non_std_ac_charger_current = <500000>;
-		charging_host_charger_current = <1500000>;
-		ta_ac_charger_current = <3000000>;
+		ac_charger_current = <1450000>;
+		ac_charger_input_current = <1450000>;
+		non_std_ac_charger_current = <1000000>;
+		charging_host_charger_current = <1450000>;
+		ta_ac_charger_current = <1450000>;
 		pd_charger_current = <500000>;
+		default_charger_current = <500000>;
 
 		/* battery temperature protection */
-		temp_t4_threshold = <50>;
+		temp_t4_threshold = <58>;
 		temp_t3_threshold = <45>;
 		temp_t1_threshold = <0>;
 	};
@@ -4924,7 +4973,7 @@ transparent_hugepage=never";
 
 		/* common */
 		battery_cv = <4350000>;
-		max_charger_voltage = <6500000>;
+		max_charger_voltage = <10000000>;
 		min_charger_voltage = <4600000>;
 
 		/* sw jeita */
@@ -4956,8 +5005,8 @@ transparent_hugepage=never";
 
 		/* charging current */
 		usb_charger_current = <500000>;
-		ac_charger_current = <2050000>;
-		ac_charger_input_current = <3200000>;
+		ac_charger_current = <3000000>;
+		ac_charger_input_current = <2000000>;
 		charging_host_charger_current = <1500000>;
 
 		/* dynamic mivr */
@@ -4981,12 +5030,33 @@ transparent_hugepage=never";
 		adapter_name = "pd_adapter";
 	};
 
+	charger_manager:charger_manager {
+		compatible = "southchip,charger_manager";
+		usb = <&usb>;
+		status = "okay";
+	};
+
+	dvchg_policy:dvchg_policy {
+		compatible = "southchip,dvchg_policy";
+		status = "okay";
+	};
+
+	rpm: rt_pd_manager {
+		compatible = "mediatek,rt_pd_manager";
+		cstatus = "okay";
+	};
+
+	xm_smart_chg: xm_smart_chg {
+		compatible = "xiaomi,xm_smart_chg";
+		status = "okay";
+	};
+
 	extcon_usb: extcon_usb {
 		compatible = "mediatek,extcon-usb";
 		charger = <&mt6370_chg>;
-		vbus-supply = <&otg_vbus>;
-		vbus-voltage = <5000000>;
-		vbus-current = <1800000>;
+		//vbus-supply = <&otg_vbus>;
+		//vbus-voltage = <5000000>;
+		//vbus-current = <1800000>;
 		tcpc = "type_c_port0";
 		mediatek,bypss-typec-sink = <1>;
 		mediatek,u2;
@@ -5013,7 +5083,7 @@ transparent_hugepage=never";
 
 	irtx_pwm:irtx_pwm {
 		compatible = "mediatek,irtx-pwm";
-		pwm_ch = <0>;
+		pwm_ch = <1>;
 		pwm_data_invert = <0>;
 		pwm-supply = "vio28";
 	};
@@ -5028,7 +5098,13 @@ transparent_hugepage=never";
 	};
 
 	touch: touch {
-		compatible = "goodix,touch";
+		compatible = "novatek,NVT-ts-spi","chipone-tddi";
+	};
+
+	xiaomi_touch{
+		compatible = "xiaomi-touch";
+		status = "ok";
+		touch,name = "xiaomi-touch";
 	};
 
 	nfc:nfc {
@@ -5282,6 +5358,10 @@ transparent_hugepage=never";
 				"GPU_0_R,GPU_0_W,APU_0_R,APU_0_W,GPU_1_R,",
 				"GPU_1_W,APU_1_R,APU_1_W";
 		};
+	};
+
+	gpio_keys: gpio-keys {
+		compatible = "gpio-keys";
 	};
 };
 
@@ -5545,9 +5625,9 @@ transparent_hugepage=never";
 	regulator-always-on;
 };
 
-&mt_pmic_vio28_ldo_reg {
+/*&mt_pmic_vio28_ldo_reg {
 	regulator-always-on;
-};
+};*/
 
 &mt_pmic_va12_ldo_reg {
 	regulator-always-on;

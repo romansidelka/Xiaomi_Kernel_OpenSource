@@ -32,8 +32,12 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/spm/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb20/musb_main/
 
 # for typec event
-ifeq ($(CONFIG_TCPC_CLASS),$(filter $(CONFIG_TCPC_CLASS),m y))
+ifneq ($(filter $(CONFIG_TCPC_CLASS),m y),)
 	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
+endif
+
+ifneq ($(filter $(CONFIG_SOUTHCHIP_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/sc_tcpc/inc
 endif
 
 # define_trace.h needs to know how to find our header

@@ -2097,7 +2097,9 @@ static int __init thermal_monitor_init(void)
 		mtk_cooler_dtm_init();
 		mtk_cooler_bcct_init();
 		mtk_cooler_cam_init();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 		mtk_cooler_mutt_init();
+#endif
 		mtk_cooler_sysrst_init();
 		mtk_cooler_VR_FPS_init();
 		ta_init();
@@ -2119,6 +2121,13 @@ static int __init thermal_monitor_init(void)
 		mtkts_dctm_init();
 		wmt_tm_init();
 		tsallts_init();
+/*n85 add thermal ntc init faction start */
+		mtkwt_cpu_init();
+		mtkcs_bts_init();
+		mtkts_ltepa_init();
+		mtkts_chargeic_init();
+		mtkwt_lcd_init();
+/*n85 add thermal ntc init faction end */
 		return 0;
 }
 
@@ -2135,7 +2144,9 @@ static void __exit thermal_monitor_exit(void)
 	mtk_cooler_dtm_exit();
 	mtk_cooler_bcct_exit();
 	mtk_cooler_cam_exit();
+#if IS_ENABLED(CONFIG_MTK_THERMAL_PA_VIA_ATCMD)
 	mtk_cooler_mutt_exit();
+#endif
 	mtk_cooler_sysrst_exit();
 	mtk_cooler_VR_FPS_exit();
 #if defined(LVTS_CPU_PM_NTFY_CALLBACK)
@@ -2151,6 +2162,13 @@ static void __exit thermal_monitor_exit(void)
 	mtkts_btsmdpa_exit();
 	mtk_mdm_txpwr_exit();
 	mtktscharger_exit();
+/*n85 add thermal ntc init faction start */
+	mtkwt_cpu_exit();
+	mtkcs_bts_exit();
+	mtkts_ltepa_exit();
+	mtkts_chargeic_exit();
+	mtkwt_lcd_exit();	
+/*n85 add thermal ntc init faction end */
 	mtk_imgs_exit();
 	mtkts_dctm_exit();
 	wmt_tm_deinit();

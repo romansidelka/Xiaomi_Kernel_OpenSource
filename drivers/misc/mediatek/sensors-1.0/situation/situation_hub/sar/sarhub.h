@@ -10,5 +10,6 @@
 
 int __init sarhub_init(void);
 void __exit sarhub_exit(void);
+extern int sar_factory_enable_calibration(void);
 
 #endif

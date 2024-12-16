@@ -52,6 +52,14 @@ thermal_monitor-y += mtk_cooler_cam.o
 #thermal zones
 thermal_monitor-y += common/thermal_zones/mtk_ts_battery.o
 
+# n85 add thermal ntc file start
+thermal_monitor-y += common/thermal_zones/mtk_wt_cpu.o
+thermal_monitor-y += common/thermal_zones/mtk_wt_bts.o
+thermal_monitor-y += common/thermal_zones/mtk_wt_ltepa.o
+thermal_monitor-y += common/thermal_zones/mtk_wt_charge_ic.o
+thermal_monitor-y += common/thermal_zones/mtk_wt_lcd.o
+# n85 add thermal ntc file end
+
 ifneq ($(CONFIG_POWER_EXT),y)
 thermal_monitor-y += common/thermal_zones/mtk_ts_bts.o
 thermal_monitor-y += common/thermal_zones/mtk_ts_btsmdpa.o

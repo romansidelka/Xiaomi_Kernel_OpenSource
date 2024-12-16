@@ -113,6 +113,11 @@
 /************************************************************************
  *
  ************************************************************************/
+#define GC08A3_SUNNY_MIPI_RAW_SENSOR_ID 0x08a3
+#define SENSOR_DRVNAME_GC08A3_SUNNY_MIPI_RAW "gc08a3_sunny_mipi_raw"
+
+#define SC520CS_TRULY_MIPI_RAW_SENSOR_ID 0xee4b
+#define SENSOR_DRVNAME_SC520CS_TRULY_MIPI_RAW "sc520cs_truly_mipi_raw"
 /* SENSOR CHIP VERSION */
 /*IMX*/
 #define IMX499_SENSOR_ID                        0x0499

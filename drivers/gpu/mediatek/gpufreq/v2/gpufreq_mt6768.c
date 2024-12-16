@@ -136,6 +136,9 @@ static void __gpufreq_update_gpu_working_table(void);
 /*external function*/
 extern void kicker_pbm_by_gpu(bool status, unsigned int loading, int voltage);
 
+void (*mtk_devfreq_set_cur_freq_fp)(unsigned long) = NULL;
+EXPORT_SYMBOL(mtk_devfreq_set_cur_freq_fp);
+
 //thermal
 static void __mt_update_gpufreqs_power_table(void);
 
@@ -1268,6 +1271,9 @@ int __gpufreq_generic_commit_gpu(int target_oppidx, enum gpufreq_dvfs_state key)
 	g_gpu.cur_oppidx = target_oppidx;
 
 	__gpufreq_footprint_oppidx(target_oppidx);
+
+	if (mtk_devfreq_set_cur_freq_fp)
+		mtk_devfreq_set_cur_freq_fp((unsigned long)g_gpu.cur_freq);
 
 	__gpufreq_kick_pbm(1);
 
@@ -2593,11 +2599,13 @@ static int __gpufreq_init_opp_table(struct platform_device *pdev)
 	if (segment_id == MT6767_SEGMENT)
 		g_gpu.segment_upbound = 15;
 	else if (segment_id == MT6769T_SEGMENT)
-		g_gpu.segment_upbound = 2;
+		/*g_gpu.segment_upbound = 2;*/
+		g_gpu.segment_upbound = 0;
 	else if (segment_id == MT6769Z_SEGMENT)
 		g_gpu.segment_upbound = 0;
 	else
-		g_gpu.segment_upbound = 7;
+		/*g_gpu.segment_upbound = 7;*/
+		g_gpu.segment_upbound = 0;
 
 	g_gpu.segment_lowbound = SIGNED_OPP_GPU_NUM - 1;
 	g_gpu.signed_opp_num = SIGNED_OPP_GPU_NUM;

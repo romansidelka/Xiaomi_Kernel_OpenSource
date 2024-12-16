@@ -3854,4 +3854,8 @@ int mt6358_mtkaif_calibration_enable(struct snd_soc_component *cmpnt);
 int mt6358_mtkaif_calibration_disable(struct snd_soc_component *cmpnt);
 int mt6358_set_mtkaif_calibration_phase(struct snd_soc_component *cmpnt,
 					int phase_1, int phase_2);
+
+void report_analog_usb_plug_in(void);
+void report_analog_usb_plug_out(void);
+
 #endif /* __MT6358_H__ */

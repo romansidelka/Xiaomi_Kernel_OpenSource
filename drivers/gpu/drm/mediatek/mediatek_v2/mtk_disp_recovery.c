@@ -39,6 +39,8 @@
 #define ESD_CHECK_PERIOD 2000 /* ms */
 static DEFINE_MUTEX(pinctrl_lock);
 
+extern int esd_restore_backlight(void);
+
 /* pinctrl implementation */
 long _set_state(struct drm_crtc *crtc, const char *name)
 {
@@ -615,6 +617,7 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 	int ret = 0;
 	int i = 0;
 	int recovery_flg = 0;
+	int need_restore_backlight = 0;
 	bool check_te = false, te_timeout = false;
 	unsigned int crtc_idx;
 
@@ -714,6 +717,7 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 				"[ESD%u]esd check fail, will do esd recovery. te timeout:%d try=%d\n",
 				crtc_idx, te_timeout, i);
 			mtk_drm_esd_recover(crtc);
+			need_restore_backlight = 1;
 			recovery_flg = 1;
 		} while (++i < ESD_TRY_CNT);
 
@@ -740,6 +744,11 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 		mutex_unlock(&private->commit.lock);
 
 		/* 2. other check & recovery */
+		if(need_restore_backlight){
+			DDPINFO("%s: esd_restore_backlight\n", __func__);
+			esd_restore_backlight();
+			need_restore_backlight = 0;
+		}
 		if (kthread_should_stop())
 			break;
 	}

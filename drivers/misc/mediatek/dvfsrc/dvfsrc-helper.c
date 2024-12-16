@@ -453,6 +453,7 @@ static void dvfsrc_force_opp(struct mtk_dvfsrc *dvfsrc, u32 opp)
 			opp);
 	}
 	dvfsrc->force_opp_idx = opp;
+        pr_info("[DVFSRC_FORCE] %s force to OPP %d\n", __func__, opp);
 }
 
 static void mtk_dvfsrc_get_perf_bw(struct mtk_dvfsrc *dvfsrc,

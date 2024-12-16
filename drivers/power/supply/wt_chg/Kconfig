@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: GPL-2.0
+#charge_policy
+source "drivers/power/supply/wt_chg/charger_policy/Kconfig"
+#sc_charger
+source "drivers/power/supply/wt_chg/sc_charger/Kconfig"
+#protocol
+source "drivers/power/supply/wt_chg/sc_charger/protocol/Kconfig"
+#subpimc
+source "drivers/power/supply/wt_chg/sc_charger/subpmic/Kconfig"
+config SOUTHCHIP_ADAPTER_CLASS
+	tristate "support southchip charger adapter class"
+	default n
+	help
+		Say Y here to support southchip charger adapter class.
+config SOUTHCHIP_CHARGER_CLASS
+	tristate "support southchip charger class"
+	default n
+	help
+		Say Y here to support southchip charger class.
+config SOUTHCHIP_DVCHG_CLASS
+	tristate "support southchip chager pump class"
+	default n
+	help
+		Say Y here to support southchip chager pump class.
+config XIAOMI_SMART_CHG
+        tristate "support xiaomi smart charge"
+        default n
+        help
+                Say Y here to support xiaomi smart charge.

@@ -37,6 +37,7 @@
 #include <linux/wait.h>
 #include <linux/workqueue.h>
 #include <uapi/linux/sched/types.h>
+#include <linux/oom.h>
 
 #include <mt-plat/aee.h>
 #if IS_ENABLED(CONFIG_MTK_AEE_IPANIC)
@@ -172,6 +173,81 @@ int add_white_list(char *name)
 	white_list = new_thread;
 	raw_spin_unlock(&white_list_lock);
 	return 0;
+}
+#define CONVERT_ADJ(x) ((x * OOM_SCORE_ADJ_MAX) / -OOM_DISABLE)
+#define REVERT_ADJ(x)  (x * (-OOM_DISABLE + 1) / OOM_SCORE_ADJ_MAX)
+  /*
+   * The process p may have detached its own ->mm while exiting or through
+   * kthread_use_mm(), but one or more of its subthreads may still have a valid
+   * pointer.  Return p, or any of its subthreads with a valid ->mm, with
+   * task_lock() held.
+   */
+  struct task_struct *find_lock_task_mm(struct task_struct *p)
+  {
+  	struct task_struct *t;
+  
+  	rcu_read_lock();
+  
+  	for_each_thread(p, t) {
+  		task_lock(t);
+  		if (likely(t->mm))
+  			goto found;
+  		task_unlock(t);
+  	}
+  	t = NULL;
+  found:
+  	rcu_read_unlock();
+  
+  	return t;
+  }
+static int dump_processes(void)
+{
+    int i, j;
+    int score_adj[37]={0};
+    //long score_adj_pss[37]={0};
+    short oom_score_adj;
+    struct task_struct *tsk;
+
+    for(i = 0, j=-18; i < 37; i++, j++)
+        score_adj[i] = CONVERT_ADJ(j);
+
+    printk("======   hang detect show processes   =====\n");
+#ifdef CONFIG_ZRAM
+    printk(" [pid]  adj    score_adj   rss    rswap      name\n");
+#else
+    printk(" [pid]  adj    score_adj   rss      name\n");
+#endif
+
+    rcu_read_lock();
+    for_each_process(tsk) {
+        struct task_struct *p;
+
+        if (tsk->flags & PF_KTHREAD)
+            continue;
+
+        p = find_lock_task_mm(tsk);
+        if (!p)
+            continue;
+
+        oom_score_adj = p->signal->oom_score_adj;
+
+        printk(
+
+#ifdef CONFIG_ZRAM
+                " [%5d] %5d%11d%8lu%8lu        %s\n", p->pid,
+                REVERT_ADJ(oom_score_adj), oom_score_adj,
+                get_mm_rss(p->mm),
+                get_mm_counter(p->mm, MM_SWAPENTS), p->comm);
+#else /* CONFIG_ZRAM */
+                " [%5d] %5d%11d%8lu        %s\n", p->pid,
+                REVERT_ADJ(oom_score_adj), oom_score_adj,
+                get_mm_rss(p->mm), p->comm);
+#endif
+        task_unlock(p);
+    }
+    rcu_read_unlock();
+
+    return 0;
 }
 
 /******************************************************************************
@@ -932,7 +1008,7 @@ static int dump_native_maps(pid_t pid, struct task_struct *current_task)
 	int mapcount = 0;
 	struct file *file;
 	int flags;
-	struct mm_struct *mm;
+	struct mm_struct *mm,*current_mm;
 	struct pt_regs *user_ret;
 	char tpath[512];
 	char *path_p = NULL;
@@ -949,17 +1025,18 @@ static int dump_native_maps(pid_t pid, struct task_struct *current_task)
 		return -1;
 	}
 
-	if (!get_task_mm(current_task)) {
+	current_mm = get_task_mm(current_task);
+	if (!current_mm) { 
 		pr_info(" %s,%d:%s: current_task->mm == NULL", __func__, pid,
 				current_task->comm);
 		return -1;
 	}
 
-	mmap_read_lock(current_task->mm);
-	vma = current_task->mm->mmap;
+	mmap_read_lock(current_mm);
+	vma = current_mm->mmap;
 	log_hang_info("Dump native maps files:\n");
 	hang_log("Dump native maps files:\n");
-	while (vma && (mapcount < current_task->mm->map_count)) {
+	while (vma && (mapcount < current_mm->map_count)) {
 		file = vma->vm_file;
 		flags = vma->vm_flags;
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
@@ -1023,8 +1100,8 @@ static int dump_native_maps(pid_t pid, struct task_struct *current_task)
 		vma = vma->vm_next;
 		mapcount++;
 	}
-	mmap_read_unlock(current_task->mm);
-	mmput(current_task->mm);
+	mmap_read_unlock(current_mm);
+	mmput(current_mm);
 	return 0;
 }
 
@@ -1036,6 +1113,7 @@ static int dump_native_info_by_tid(pid_t tid,
 	unsigned long userstack_start = 0;
 	unsigned long userstack_end = 0, length = 0;
 	int ret = -1;
+	struct mm_struct *current_mm;
 
 	if (!current_task)
 		return -ESRCH;
@@ -1047,13 +1125,14 @@ static int dump_native_info_by_tid(pid_t tid,
 		return ret;
 	}
 
-	if (!get_task_mm(current_task)) {
+	current_mm = get_task_mm(current_task);
+	if (!current_mm) {
 		pr_info(" %s,%d:%s, current_task->mm == NULL", __func__, tid,
 				current_task->comm);
 		return ret;
 	}
 
-	mmap_read_lock(current_task->mm);
+	mmap_read_lock(current_mm);
 #ifndef __aarch64__		/* 32bit */
 	log_hang_info(" pc/lr/sp 0x%08x/0x%08x/0x%08x\n", user_ret->ARM_pc,
 			user_ret->ARM_lr, user_ret->ARM_sp);
@@ -1081,7 +1160,7 @@ static int dump_native_info_by_tid(pid_t tid,
 		(long)(user_ret->ARM_r1), (long)(user_ret->ARM_r0));
 
 	userstack_start = (unsigned long)user_ret->ARM_sp;
-	vma = current_task->mm->mmap;
+	vma = current_mm->mmap;
 	while (vma) {
 		if (vma->vm_start <= userstack_start &&
 			vma->vm_end >= userstack_start) {
@@ -1089,12 +1168,12 @@ static int dump_native_info_by_tid(pid_t tid,
 			break;
 		}
 		vma = vma->vm_next;
-		if (vma == current_task->mm->mmap)
+		if (vma == current_mm->mmap)
 			break;
 	}
 
 #if !IS_ENABLED(CONFIG_MTK_HANG_PROC)
-	mmap_read_unlock(current_task->mm);
+	mmap_read_unlock(current_mm);
 #endif
 
 	if (!userstack_end) {
@@ -1193,7 +1272,7 @@ static int dump_native_info_by_tid(pid_t tid,
 			(long)(user_ret->user_regs.regs[1]),
 			(long)(user_ret->user_regs.regs[0]));
 		userstack_start = (unsigned long)user_ret->user_regs.regs[13];
-		vma = current_task->mm->mmap;
+		vma = current_mm->mmap;
 		while (vma) {
 			if (vma->vm_start <= userstack_start &&
 				vma->vm_end >= userstack_start) {
@@ -1201,14 +1280,13 @@ static int dump_native_info_by_tid(pid_t tid,
 				break;
 			}
 			vma = vma->vm_next;
-			if (vma == current_task->mm->mmap)
+			if (vma == current_mm->mmap)
 				break;
 		}
 
 #if !IS_ENABLED(CONFIG_MTK_HANG_PROC)
-		mmap_read_unlock(current_task->mm);
+		mmap_read_unlock(current_mm);
 #endif
-
 		if (!userstack_end) {
 			pr_info("Dump native stack failed:\n");
 			goto err;
@@ -1264,7 +1342,7 @@ static int dump_native_info_by_tid(pid_t tid,
 		}
 	} else {		/*K64+U64 */
 		userstack_start = (unsigned long)user_ret->user_regs.sp;
-		vma = current_task->mm->mmap;
+		vma = current_mm->mmap;
 		while (vma) {
 			if (vma->vm_start <= userstack_start &&
 					vma->vm_end >= userstack_start) {
@@ -1272,12 +1350,12 @@ static int dump_native_info_by_tid(pid_t tid,
 				break;
 			}
 			vma = vma->vm_next;
-			if (vma == current_task->mm->mmap)
+			if (vma == current_mm->mmap)
 				break;
 		}
 
 #if !IS_ENABLED(CONFIG_MTK_HANG_PROC)
-		mmap_read_unlock(current_task->mm);
+		mmap_read_unlock(current_mm);
 #endif
 
 		if (!userstack_end) {
@@ -1349,9 +1427,9 @@ static int dump_native_info_by_tid(pid_t tid,
 	ret = 0;
 err:
 #if IS_ENABLED(CONFIG_MTK_HANG_PROC)
-	mmap_read_unlock(current_task->mm);
+	mmap_read_unlock(current_mm);
 #endif
-	mmput(current_task->mm);
+	mmput(current_mm);
 	return ret;
 
 }
@@ -1629,6 +1707,7 @@ static void show_status(int flag)
 	if (Hang_first_done)	{ /* the last dump */
 		/* debug_locks = 1; */
 		debug_show_all_locks();
+		dump_processes();
 #ifndef MODULE
 		show_free_areas(0, NULL);
 #endif

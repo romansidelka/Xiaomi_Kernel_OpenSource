@@ -352,6 +352,7 @@ static int cqhci_enable(struct mmc_host *mmc, struct mmc_card *card)
 #ifdef DEBUG
 	cqhci_dumpregs(cq_host);
 #endif
+
 	return 0;
 }
 

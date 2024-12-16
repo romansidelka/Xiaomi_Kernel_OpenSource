@@ -44,6 +44,9 @@ struct service_handler reetime;
 struct service_handler vfs_handler;
 static struct completion teei_bdrv_comp;
 
+#ifdef DYNAMIC_SET_PRIORITY
+static struct completion teei_bdrv_done;
+#endif
 
 static long register_shared_param_buf(struct service_handler *handler)
 {
@@ -111,8 +114,8 @@ static void reetime_deinit(struct service_handler *handler)
 static int reetime_handle(struct NQ_entry *entry)
 {
 	struct timespec64 tp;
-	int tv_sec;
-	int tv_usec;
+	long tv_sec;
+	long tv_usec;
 	unsigned long long block_p = 0;
 	unsigned long long time_type = 0;
 	int retVal = 0;
@@ -121,7 +124,7 @@ static int reetime_handle(struct NQ_entry *entry)
 	block_p = entry->block_p;
 
 	if (time_type == GET_UPTIME) {
-		getboottime64(&tp);
+		ktime_get_boottime_ts64(&tp);
 		tv_sec = tp.tv_sec;
 		tv_usec = tp.tv_nsec / 1000;
 	} else {
@@ -281,6 +284,13 @@ void teei_notify_bdrv_fn(void)
 	complete(&teei_bdrv_comp);
 }
 
+void teei_wait_for_bdrv_done(void)
+{
+#ifdef DYNAMIC_SET_PRIORITY
+       wait_for_completion(&teei_bdrv_done);	
+#endif
+}
+
 int teei_bdrv_fn(void *work)
 {
 	struct bdrv_work_struct *bdrv_entry = NULL;
@@ -302,6 +312,9 @@ int teei_bdrv_fn(void *work)
 			IMSG_ERROR("TEEI: Failed to handle the bdrv entry\n");
 			return retVal;
 		}
+#ifdef DYNAMIC_SET_PRIORITY
+	complete(&teei_bdrv_done);
+#endif
 	}
 
 	return 0;
@@ -310,7 +323,9 @@ int teei_bdrv_fn(void *work)
 int init_bdrv_comp_fn(void)
 {
 	init_completion(&teei_bdrv_comp);
-
+#ifdef DYNAMIC_SET_PRIORITY
+	init_completion(&teei_bdrv_done);
+#endif
 	return 0;
 }
 

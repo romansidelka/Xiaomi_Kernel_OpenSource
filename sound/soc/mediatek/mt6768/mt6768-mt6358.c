@@ -9,13 +9,16 @@
 #include <linux/pm_runtime.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
-
+#include <linux/pinctrl/consumer.h>
 #include "../common/mtk-afe-platform-driver.h"
 #include "mt6768-afe-common.h"
 #include "mt6768-afe-clk.h"
 #include "mt6768-afe-gpio.h"
 #include "../../codecs/mt6358.h"
 #include "../common/mtk-sp-spk-amp.h"
+#include "../../codecs/sipa/sipa_aux_dev_if.h"
+
+#include "../../../../drivers/misc/mediatek/typec/sc_tcpc/inc/tcpci_core.h"
 
 #if IS_ENABLED(CONFIG_SND_SOC_MT6358_ACCDET)
       #include "../../codecs/mt6358-accdet.h"
@@ -28,6 +31,21 @@
  */
 #define EXT_SPK_AMP_W_NAME "Ext_Speaker_Amp"
 
+static struct pinctrl *aud_pinctrl;
+struct audio_gpio_attr2 {
+        const char *name;
+        bool gpio_prepare;
+        struct pinctrl_state *gpioctrl;
+};
+enum mt6768_gpio {
+        SPEAKER_CON,
+        RECEIVER_CON,
+        MT6768_GPIO_NUM
+};
+static struct audio_gpio_attr2 aud_gpios[MT6768_GPIO_NUM] = {
+        [SPEAKER_CON] = {"speaker_con", false, NULL},
+        [RECEIVER_CON] = {"receiver_con", false, NULL},
+};
 static const char *const mt6768_spk_type_str[] = {MTK_SPK_NOT_SMARTPA_STR,
 						  MTK_SPK_RICHTEK_RT5509_STR,
 						  MTK_SPK_MEDIATEK_MT6660_STR};
@@ -43,6 +61,110 @@ static const struct soc_enum mt6768_spk_type_enum[] = {
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mt6768_spk_i2s_type_str),
 			    mt6768_spk_i2s_type_str),
 };
+
+static const char *const switch_type_str[] = { "SPK", "REC" };
+static const struct soc_enum switch_enum =
+        SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(switch_type_str), switch_type_str);
+static int switch_state_get(struct snd_kcontrol *kcontrol,
+			       struct snd_ctl_elem_value *ucontrol)
+{
+	ucontrol->value.integer.value[0] = 0;
+	return 0;
+}
+
+static int switch_state_set(struct snd_kcontrol *kcontrol,
+				       struct snd_ctl_elem_value *ucontrol)
+{
+        int idx = ucontrol->value.integer.value[0];
+        int ret;
+
+        if(idx != 0 && idx != 1){
+                pr_err("%s(),%d,idx error\n",__func__,idx);
+                return 0;
+        }
+
+        if (!aud_gpios[idx].gpio_prepare) {
+                pr_err("%s(), error, gpio AUD_SW_EN not prepared\n",
+                         __func__);
+        } else {
+                pr_err("%s(),%d,idx error\n",__func__,idx);
+                ret = pinctrl_select_state(aud_pinctrl, aud_gpios[idx].gpioctrl);
+                if (ret) {
+                        pr_err("%s(), error, can not set gpio type high\n",
+                               __func__);
+                }
+	}
+        pr_err("%s(),%d,idx error\n",__func__,idx);
+	return 0;
+}
+struct usb_priv {
+	struct device *dev;
+	struct notifier_block psy_nb;
+	struct tcpc_device *tcpc_dev;
+};
+struct usb_priv *g_usbc_priv = NULL;
+static int analog_usb_typec_event_changed(struct notifier_block *nb,
+					unsigned long evt, void *ptr)
+{
+	struct tcp_notify *noti = ptr;
+	struct usb_priv *usbc_priv = container_of(nb, struct usb_priv, psy_nb);
+	pr_info("%s: enter\n", __func__);
+	if (NULL == noti) {
+		pr_err("%s:data is NULL. \n", __func__);
+		return -EINVAL;
+	}
+	if (!usbc_priv || (usbc_priv != g_usbc_priv))
+		return -EINVAL;
+	pr_info("%s: USB change event received, evt %d, expected %d, ole state %d, new state %d\n",
+		__func__, evt, TCP_NOTIFY_TYPEC_STATE, noti->typec_state.old_state, noti->typec_state.new_state);
+	switch (evt) {
+	case TCP_NOTIFY_TYPEC_STATE:
+		if (noti->typec_state.old_state == TYPEC_UNATTACHED &&
+			noti->typec_state.new_state == TYPEC_ATTACHED_AUDIO) {
+			/* Audio Plug in */
+			pr_info("%s: Audio Plug in\n", __func__);
+			report_analog_usb_plug_in();
+		} else if (noti->typec_state.old_state == TYPEC_ATTACHED_AUDIO &&
+			noti->typec_state.new_state == TYPEC_UNATTACHED) {
+			/* Audio Plug out */
+			pr_info("%s: Audio Plug out\n", __func__);
+			report_analog_usb_plug_out();
+		}
+		break;
+	}
+	return 0;
+}
+static int analog_usb_typec_event_setup(struct platform_device *platform_device)
+{
+	int rc = 0;
+	pr_info("%s: enter\n", __func__);
+	if (NULL != g_usbc_priv) {
+		pr_err("%s: had done! \n", __func__);
+		return -EINVAL;
+	}
+	g_usbc_priv = devm_kzalloc(&platform_device->dev, sizeof(*g_usbc_priv),
+				GFP_KERNEL);
+	if (!g_usbc_priv)
+		return -ENOMEM;
+	g_usbc_priv->dev = &platform_device->dev;
+	g_usbc_priv->tcpc_dev = tcpc_dev_get_by_name("type_c_port0");
+	if (!g_usbc_priv->tcpc_dev) {
+		rc = -EPROBE_DEFER;
+		pr_err("%s: get tcpc device type_c_port0 fail \n", __func__);
+		goto err_data;
+	}
+	/* register tcpc_event */
+	g_usbc_priv->psy_nb.notifier_call = analog_usb_typec_event_changed;
+	g_usbc_priv->psy_nb.priority = 0;
+	rc = register_tcp_dev_notifier(g_usbc_priv->tcpc_dev, &g_usbc_priv->psy_nb, TCP_NOTIFY_TYPE_USB);
+	if (rc) {
+		pr_info("%s: register_tcp_dev_notifier failed\n", __func__);
+	}
+	return 0;
+err_data:
+	devm_kfree(&platform_device->dev, g_usbc_priv);
+	return rc;
+}
 
 static int mt6768_spk_type_get(struct snd_kcontrol *kcontrol,
 			       struct snd_ctl_elem_value *ucontrol)
@@ -80,15 +202,35 @@ static int mt6768_mt6358_spk_amp_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_dapm_context *dapm = w->dapm;
 	struct snd_soc_card *card = dapm->card;
+        int ret;
 
 	dev_info(card->dev, "%s(), event %d\n", __func__, event);
-
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		/* spk amp on control */
+               /* spk amp on control */
+        if (!aud_gpios[SPEAKER_CON].gpio_prepare) {
+                pr_err("%s(), error, gpio AUD_SW_EN not prepared\n",
+                         __func__);
+        } else {
+                ret = pinctrl_select_state(aud_pinctrl, aud_gpios[SPEAKER_CON].gpioctrl);
+                if (ret) {
+                        pr_err("%s(), error, can not set gpio type high\n",
+                               __func__);
+                }
+	}
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		/* spk amp off control */
+        if (!aud_gpios[RECEIVER_CON].gpio_prepare) {
+                pr_err("%s(), error, gpio AUD_SW_EN not prepared\n",
+                         __func__);
+        } else {
+                ret = pinctrl_select_state(aud_pinctrl, aud_gpios[RECEIVER_CON].gpioctrl);
+                if (ret) {
+                        pr_err("%s(), error, can not set gpio type low\n",
+                               __func__);
+                }
+        }
 		break;
 	default:
 		break;
@@ -116,6 +258,8 @@ static const struct snd_kcontrol_new mt6768_mt6358_controls[] = {
 		     mt6768_spk_i2s_out_type_get, NULL),
 	SOC_ENUM_EXT("MTK_SPK_I2S_IN_TYPE_GET", mt6768_spk_type_enum[1],
 		     mt6768_spk_i2s_in_type_get, NULL),
+        SOC_ENUM_EXT("SPK_REC_SWITCH", switch_enum,
+                        switch_state_get, switch_state_set),
 };
 
 /*
@@ -895,6 +1039,32 @@ static struct snd_soc_card mt6768_mt6358_soc_card = {
 	.num_dapm_routes = ARRAY_SIZE(mt6768_mt6358_routes),
 };
 
+static int aud_gpio_init(struct device *dev)
+{
+        int ret;
+	int i;
+        aud_pinctrl = devm_pinctrl_get(dev);
+        if (IS_ERR(aud_pinctrl)) {
+                pr_err("Cannot find aud_pinctrl!\n");
+                return (int)PTR_ERR(aud_pinctrl);
+        }
+
+        for (i = 0; i < ARRAY_SIZE(aud_gpios); i++) {
+                aud_gpios[i].gpioctrl = pinctrl_lookup_state(aud_pinctrl,
+                                                             aud_gpios[i].name);
+                if (IS_ERR(aud_gpios[i].gpioctrl)) {
+                        ret = PTR_ERR(aud_gpios[i].gpioctrl);
+                        pr_err("%s(), pinctrl_lookup_state %s fail, ret %d\n",
+                                __func__, aud_gpios[i].name, ret);
+                } else {
+                        aud_gpios[i].gpio_prepare = true;
+                }
+        }
+
+	return pinctrl_select_state(aud_pinctrl,
+				aud_gpios[RECEIVER_CON].gpioctrl);
+}
+
 static int mt6768_mt6358_dev_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &mt6768_mt6358_soc_card;
@@ -954,6 +1124,14 @@ static int mt6768_mt6358_dev_probe(struct platform_device *pdev)
 
 	card->dev = &pdev->dev;
 
+	ret = soc_aux_init_only_sia81xx(pdev, card);
+	if (ret)
+		dev_err(&pdev->dev, "%s soc_aux_init_only_sia81xx fail %d\n",
+			__func__, ret);
+	ret = analog_usb_typec_event_setup(pdev);
+	if (ret) {
+		dev_err(&pdev->dev,"%s analog usb typeC event setup fail.ret:%d\n", __func__, ret);
+	}
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret)
 		dev_err(&pdev->dev, "%s snd_soc_register_card fail %d\n",
@@ -961,6 +1139,11 @@ static int mt6768_mt6358_dev_probe(struct platform_device *pdev)
 	else
 		dev_err(&pdev->dev, "%s snd_soc_register_card pass %d\n",
 				__func__, ret);
+        ret = aud_gpio_init(&pdev->dev);
+        if (ret) {
+                pr_err("%s audio sw en gpio init failed %d\n", __func__, ret);
+        }
+
 	return ret;
 }
 

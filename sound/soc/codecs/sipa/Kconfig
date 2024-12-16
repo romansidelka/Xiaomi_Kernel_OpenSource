@@ -1,0 +1,11 @@
+config SND_SOC_SIA8152S
+	tristate "SoC Audio for SIA8152S Smart K PA"
+	depends on I2C
+	help
+	  This option enables support for SIA8152S Smart K PA.
+
+config SND_SOC_SIA8150
+	tristate "SoC Audio for SIA8150 Smart K PA"
+	depends on I2C
+	help
+	  This option enables support for SIA8150 Smart K PA.

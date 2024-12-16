@@ -21,6 +21,8 @@
 #include "soter_smc.h"
 #include <teei_cancel_cmd.h>
 
+#define STATUS_KILLED         1
+
 #if IS_ENABLED(CONFIG_MICROTRUST_TZDRIVER_DYNAMICAL_DEBUG)
 unsigned long ree_dynamical_debug;
 struct timeval start_val;
@@ -234,6 +236,11 @@ int soter_open_session(struct tee_context *ctx,
 	while (teei_capi_ready != 1)
 		msleep(50);
 
+	if (teei_daemon_status == STATUS_KILLED)
+	{
+		return -EIO;
+	}
+
 	/* +2 for the meta parameters added below */
 	shm = get_msg_arg(ctx, arg->num_params + 2, &msg_arg, &msg_parg);
 	if (IS_ERR(shm))
@@ -307,6 +314,11 @@ int soter_close_session(struct tee_context *ctx, u32 session)
 	phys_addr_t msg_parg = 0;
 	struct soter_session *sess;
 
+	if (teei_daemon_status == STATUS_KILLED)
+	{
+		return -EIO;
+	}
+
 	/* Check that the session is valid and remove it from the list */
 	mutex_lock(&ctxdata->mutex);
 	sess = find_session(ctxdata, session);
@@ -343,7 +355,11 @@ int soter_invoke_func(struct tee_context *ctx, struct tee_ioctl_invoke_arg *arg,
 #if IS_ENABLED(CONFIG_MICROTRUST_TZDRIVER_DYNAMICAL_DEBUG)
 	long time_used;
 #endif
-
+	
+	if (teei_daemon_status == STATUS_KILLED)
+	{
+		return -EIO;
+	}
 	/* Check that the session is valid */
 	mutex_lock(&ctxdata->mutex);
 	sess = find_session(ctxdata, arg->session);

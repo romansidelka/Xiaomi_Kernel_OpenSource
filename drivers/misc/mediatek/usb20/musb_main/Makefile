@@ -28,6 +28,9 @@ ifeq ($(CONFIG_TCPC_CLASS),y)
 	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
 endif
 # for ep0 test
+ifneq ($(filter $(CONFIG_SOUTHCHIP_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/sc_tcpc/inc
+endif
 ccflags-y += -I$(srctree)/drivers/usb/core/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb20
 

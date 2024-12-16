@@ -100,6 +100,8 @@ void teei_handle_bdrv_call(struct NQ_entry *entry)
 	teei_add_to_bdrv_link(&(work_ent->c_link));
 
 	teei_notify_bdrv_fn();
+	/* waiting for the teei_bdrv_thr done*/
+	teei_wait_for_bdrv_done();
 }
 
 void teei_handle_schedule_call(struct NQ_entry *entry)

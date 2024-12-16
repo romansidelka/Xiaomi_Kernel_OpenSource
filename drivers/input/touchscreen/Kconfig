@@ -1395,6 +1395,9 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
 source "drivers/input/touchscreen/hxchipset/Kconfig"
 source "drivers/input/touchscreen/GT9966/Kconfig"
+source "drivers/input/touchscreen/xiaomi/Kconfig"
+source "drivers/input/touchscreen/NT36523D_SPI/Kconfig"
+source "drivers/input/touchscreen/ICNL9951R_SPI/Kconfig"
 
 endif
 

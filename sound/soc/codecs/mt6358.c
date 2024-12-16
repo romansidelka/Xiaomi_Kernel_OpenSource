@@ -28,6 +28,9 @@
 #define MAX_DEBUG_WRITE_INPUT 256
 #define CODEC_SYS_DEBUG_SIZE (1024 * 32)
 
+#include <sound/jack.h>
+struct snd_soc_jack g_usb_3_5_jack;
+
 static ssize_t mt6358_codec_sysfs_read(struct file *filep, struct kobject *kobj,
 				       struct bin_attribute *attr,
 				       char *buf, loff_t offset, size_t size);
@@ -47,6 +50,19 @@ int mt6358_set_codec_ops(struct snd_soc_component *cmpnt,
 	return 0;
 }
 EXPORT_SYMBOL_GPL(mt6358_set_codec_ops);
+
+void report_analog_usb_plug_in() {
+	snd_soc_jack_report(&g_usb_3_5_jack, (SND_JACK_HEADSET | SND_JACK_VIDEOOUT),
+			(SND_JACK_HEADSET | SND_JACK_VIDEOOUT));
+	pr_info("%s: report analog usb plug in successful \n", __func__);
+}
+EXPORT_SYMBOL_GPL(report_analog_usb_plug_in);
+
+void report_analog_usb_plug_out(){
+	snd_soc_jack_report(&g_usb_3_5_jack, 0, (SND_JACK_HEADSET | SND_JACK_VIDEOOUT));
+	pr_info("%s: report analog usb plug out successful \n", __func__);
+}
+EXPORT_SYMBOL_GPL(report_analog_usb_plug_out);
 
 static struct bin_attribute codec_dev_attr_reg = {
 	.attr = {
@@ -2739,7 +2755,7 @@ static int mt6358_amic_enable(struct mt6358_priv *priv)
 		}
 		/* Enable MICBIAS0, MISBIAS0 = 1P9V */
 		regmap_update_bits(priv->regmap, MT6358_AUDENC_ANA_CON9,
-				   0xff, 0x21);
+				   0xff, 0x71);
 	}
 
 	/* mic bias 1 */
@@ -2750,7 +2766,7 @@ static int mt6358_amic_enable(struct mt6358_priv *priv)
 				     MT6358_AUDENC_ANA_CON10, 0x0161);
 		else
 			regmap_write(priv->regmap,
-				     MT6358_AUDENC_ANA_CON10, 0x0061);
+				     MT6358_AUDENC_ANA_CON10, 0x0071);
 	}
 
 	/* set mic pga gain */
@@ -6701,6 +6717,12 @@ static int mt6358_codec_probe(struct snd_soc_component *cmpnt)
 	priv->hp_current_calibrate_val = 0;
 #endif
 
+	pr_info("%s: snd_soc_card_jack_new\n", __func__);
+	ret = snd_soc_card_jack_new(cmpnt->card, "USB_3_5 Jack", (SND_JACK_VIDEOOUT | SND_JACK_HEADSET),
+                                   &g_usb_3_5_jack, NULL, 0);
+	if (ret) {
+		pr_err("%s: Failed to create new jack USB_3_5 Jack\n", __func__);
+	}
 	return 0;
 }
 

@@ -14,7 +14,7 @@
 #include <linux/workqueue.h>
 #include <linux/init.h>
 #include <linux/types.h>
-
+#include <linux/hardware_info.h>
 #ifdef IMGSENSOR_USE_RPM
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
@@ -84,6 +84,14 @@ MUINT32 last_id;
 /*prevent imgsensor race condition in vulunerbility test*/
 struct mutex imgsensor_mutex;
 
+#define SENSOR_NUM 2
+#define SENSOR_LENGTH 40
+
+unsigned char fusion_id_main[96] = {0};
+unsigned char sn_main[96] = {0};
+unsigned char fusion_id_front[96] = {0};
+unsigned char sn_front[96] = {0};
+char imgsensor_name[SENSOR_NUM][SENSOR_LENGTH] = {0};
 
 DEFINE_MUTEX(pinctrl_mutex);
 DEFINE_MUTEX(oc_mutex);
@@ -467,6 +475,18 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	} else {
 		pr_info(" Sensor found ID = 0x%x\n", sensorID);
 		err = ERROR_NONE;
+//-yangjunjie.wt, add, 2024/2/06, add factory camera info
+		if (psensor_inst->sensor_idx == IMGSENSOR_SENSOR_IDX_MAIN) {
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM, psensor_inst->psensor_name);
+			if (!strcmp("gc08a3_sunny_mipi_raw", (char *)psensor_inst->psensor_name)) 
+				hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID, "sunny");
+		}
+		if (psensor_inst->sensor_idx == IMGSENSOR_SENSOR_IDX_SUB) {
+		        hardwareinfo_set_prop(HARDWARE_FRONT_CAM, psensor_inst->psensor_name);
+			if (!strcmp("sc520cs_truly_mipi_raw", (char *)psensor_inst->psensor_name))
+				hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID, "truly");
+		}
+//-yangjunjie.wt, add, 2024/2/06, add factory camera info
 	}
 
 	if (err != ERROR_NONE)
@@ -599,6 +619,7 @@ int imgsensor_set_driver(struct IMGSENSOR_SENSOR *psensor)
 					    psensor_inst->psensor_name);
 
 					ret = drv_idx;
+					strcpy(imgsensor_name[psensor->inst.sensor_idx], psensor_inst->psensor_name);
 					break;
 				}
 			} else {
@@ -2959,9 +2980,75 @@ static const struct file_operations gimgsensor_file_operations = {
 	.compat_ioctl = imgsensor_compat_ioctl
 #endif
 };
+static ssize_t imgsensor_name_show(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	ssize_t ret = 0;
+	int num1 = 0;
+	int num2 = 0;
+	unsigned int i = 0;
 
+	for (i = 0; i < SENSOR_NUM; i++) {
+		if (!strcmp("gc08a3_sunny_mipi_raw", imgsensor_name[i])) {
+			num1 = sprintf(buf, "WIDE=%s\n", imgsensor_name[i]);
+			pr_err("MAIN=%s\n", imgsensor_name[i]);
+			continue;
+		}
+
+		if (!strcmp("sc520cs_truly_mipi_raw", imgsensor_name[i])) {
+			num2 = sprintf(buf + num1, "FRONT=%s\n", imgsensor_name[i]);
+			pr_err("FRONT=%s\n", imgsensor_name[i]);
+			continue;
+		}
+
+	}
+	ret = strlen(buf) + 1;
+	return ret;
+}
+  static DEVICE_ATTR(sensor, 0664, imgsensor_name_show, NULL);
+
+  static ssize_t sensorid_show(struct device *dev, struct device_attribute *attr, char *buf)
+  {
+  	int i;
+  	ssize_t size = 0;
+  
+  	//main
+  	for (i = 0; i < 16; i++) {
+  		sprintf(buf + 2*i, "%02x", fusion_id_main[i]);
+  	}
+  	size = strlen(buf);
+  	//front
+  	for (i = 0; i < 16; i++) {
+  		sprintf(buf + 32 + 2*i, "%02x", fusion_id_front[i]);
+  	}
+  	return 100;
+  
+  }
+  static DEVICE_ATTR(sensorid, 0664, sensorid_show, NULL);
+  static ssize_t sensorsn_show(struct device *dev, struct device_attribute *attr, char *buf)
+  {
+      int i;
+      ssize_t size = 0;
+  	//main
+      //strncpy(buf, "main:", 5);
+      for (i = 0; i < 14; i++) {
+  		sprintf(buf + i, "%1c", sn_main[i]);
+		pr_err(" sn_main[%d] = %02x = %1c", i, sn_main[i], sn_main[i]);
+      }
+      size = strlen(buf);
+  	//front
+      //strncpy(buf + size, "1", 1);
+      for (i = 0; i < 14; i++) {
+  		sprintf(buf + size + i, "%1cx", sn_front[i]);
+		pr_err(" sn_front[%d] = %02x = %1c", i, sn_front[i], sn_front[i]);
+      }
+  	return 179;
+  
+  }
+  
+  static DEVICE_ATTR(sensorsn, 0664, sensorsn_show, NULL);
 static inline int imgsensor_driver_register(void)
 {
+	int ret1;
 	dev_t dev_no = MKDEV(IMGSENSOR_DEVICE_NNUMBER, 0);
 
 	if (alloc_chrdev_region(&dev_no, 0, 1, IMGSENSOR_DEV_NAME)) {
@@ -3005,7 +3092,9 @@ static inline int imgsensor_driver_register(void)
 		    dev_no,
 		    NULL,
 		    IMGSENSOR_DEV_NAME);
-
+        ret1 = sysfs_create_file(&gimgsensor_device->kobj, &dev_attr_sensor.attr);
+        ret1 = sysfs_create_file(&gimgsensor_device->kobj, &dev_attr_sensorid.attr);
+        ret1= sysfs_create_file(&gimgsensor_device->kobj, &dev_attr_sensorsn.attr);
 	return 0;
 }
 
